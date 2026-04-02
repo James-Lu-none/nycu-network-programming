@@ -36,7 +36,7 @@
 #include <string>
 #include <time.h>
 #include <stdio.h>
-
+// socket bind listen accept send close in one thread, so the server can only handle one client at a time
 using namespace std;
 int main() {
 // Initialize Winsock (for Windows)
