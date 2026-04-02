@@ -101,6 +101,21 @@ int main() {
         );
         printf("Client IP: %s\n", address_buffer);
 
+        char buffer[4096];
+        int bytes_received = recv(
+            socket_client,
+            buffer,
+            sizeof(buffer) - 1,
+            0);
+        if (bytes_received < 0)
+        {
+            fprintf(stderr, "recv() failed: %d\n", SOCKET_ERROR_CODE);
+            CLOSESOCKET(socket_client);
+            continue;
+        }
+        buffer[bytes_received] = 0;
+        printf("Client sent:\n%s\n", buffer);
+
         int byte_send = 0;
         time_t timer;
         time(&timer);
@@ -135,7 +150,7 @@ int main() {
             fprintf(stderr, "send() failed: %d\n", SOCKET_ERROR_CODE);
             return 1;
         }
-        printf("sent bytes: %d\n", byte_send);
+        printf("Server sent:\n%s\n", response);
         
         printf("closing client socket...\n");
         CLOSESOCKET(socket_client);
