@@ -56,7 +56,7 @@ int try_udp_connection(const char* host, const char* port, SOCKET* s_out, struct
     FD_ZERO(&read_fds);
     FD_SET(*s_out, &read_fds);
     struct timeval tv;
-    tv.tv_sec = 2; // 2 seconds timeout
+    tv.tv_sec = 3; // 3 seconds timeout
     tv.tv_usec = 0;
 
     if (select((int)*s_out + 1, &read_fds, NULL, NULL, &tv) > 0) {
