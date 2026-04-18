@@ -21,6 +21,10 @@
 5. client name initialization:
     - for both tcp and udp, when a new client connects, assign a random username to it (Guest-{random_string})
     - since `your_name` is a required argment in the assignment, so i just send a `/nick` command to change the username to the one you provided when connected to the server
+6. udp application layer two-way handshake:
+    - when a client wants to connect via udp, it will send a `/ping` command to the server
+    - the server will respond with a `[PONG]` message to the client
+    - if the client doesn't receive a `[PONG]` message within 3 seconds, it will assume the connection is failed
 
 ## additional features
 
