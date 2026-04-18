@@ -30,7 +30,7 @@ int try_tcp_connection(const char* host, const char* port, SOCKET* s_out) {
         return 1;
     }
     freeaddrinfo(res);
-    printf("Connected via TCP.\n");
+    LOG_INFO("Connected via TCP.");
     return 0;
 }
 
@@ -68,7 +68,7 @@ int try_udp_connection(const char* host, const char* port, SOCKET* s_out, struct
                 memcpy(addr, res->ai_addr, res->ai_addrlen);
                 *len = res->ai_addrlen;
                 freeaddrinfo(res);
-                printf("Connected via UDP.\n");
+                LOG_INFO("Connected via UDP.");
                 return 0;
             }
         }
@@ -82,7 +82,7 @@ int try_udp_connection(const char* host, const char* port, SOCKET* s_out, struct
 
 int main(int argc, char* argv[]) {
     if (argc < 3) {
-        printf("Usage: %s <host> <username> [port] [protocol]\n", argv[0]);
+        LOG_ERROR("Usage: %s <host> <username> [port] [protocol]", argv[0]);
         return 1;
     }
     const char* host = argv[1];
@@ -95,7 +95,7 @@ int main(int argc, char* argv[]) {
     if (argc >= 5) {
         protocol = argv[4];
     }
-    printf("Host: %s, User: %s, Port: %s, Proto: %s\n", host, username, port, protocol);
+    LOG_INFO("Host: %s, User: %s, Port: %s, Proto: %s", host, username, port, protocol);
 
 #if defined(_WIN32) || defined(_WIN64)
     WSADATA wsaData;
@@ -109,7 +109,7 @@ int main(int argc, char* argv[]) {
     switch (protocol[0]) {
         case 't':
             if (try_tcp_connection(host, port, &s) != 0) {
-                printf("TCP connection failed. Falling back to UDP...\n");
+                LOG_ERROR("TCP connection failed. Falling back to UDP...");
                 if (try_udp_connection(host, port, &s, &server_addr, &addr_len) != 0) {
                     return 1;
                 }
@@ -123,7 +123,7 @@ int main(int argc, char* argv[]) {
             use_tcp = false;
             break;
         default:
-            printf("Invalid protocol. Use 'tcp' or 'udp'.\n");
+            LOG_ERROR("Invalid protocol. Use 'tcp' or 'udp'.");
             return 1;
     }
 
@@ -135,7 +135,7 @@ int main(int argc, char* argv[]) {
         sendto(s, msg.c_str(), msg.length(), 0, (struct sockaddr*)&server_addr, addr_len);
     }
 
-    printf("You can now start chatting! Type /help for commands.\n");
+    LOG_INFO("You can now start chatting! Type /help for commands.");
 
     struct timeval tv;
     tv.tv_sec = 0;
@@ -165,7 +165,7 @@ int main(int argc, char* argv[]) {
             int bytes = (use_tcp) ? recv(s, buffer, BUFFER_SIZE - 1, 0) 
                                 : recvfrom(s, buffer, BUFFER_SIZE - 1, 0, NULL, NULL);
             if (bytes <= 0) {
-                printf("\nDisconnected from server.\n");
+                LOG_ERROR("Disconnected from server.");
                 break;
             }
             // if receive start with "pong" 
@@ -194,7 +194,7 @@ int main(int argc, char* argv[]) {
         }
 
         if (ping_fail_count >= 3) {
-            printf("\nServer timeout after 3 ping failures.\n");
+            LOG_ERROR("Server timeout after 3 ping failures.");
             break;
         }
 
