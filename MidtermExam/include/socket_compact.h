@@ -7,6 +7,7 @@
 
     #include <winsock2.h>
     #include <ws2tcpip.h>
+    #include <conio.h>
     // Link with the Ws2_32.lib library
     #pragma comment(lib, "ws2_32.lib")
 #else
