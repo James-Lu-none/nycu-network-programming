@@ -27,13 +27,16 @@ void handleMessage(shared_ptr<BaseClient> client, const char* buffer, int len) {
         string response;
         // split msg by space
         size_t space_pos = msg.find(' ');
+        string command, arg;
         if (space_pos == string::npos) {
-            space_pos = msg.length();
+            command = msg.substr(1);
+            arg = "";
+        } else {
+            command = msg.substr(1, space_pos - 1);
+            arg = msg.substr(space_pos + 1);
         }
-        string command = msg.substr(1, space_pos - 1);
-        string arg = msg.substr(space_pos + 1);
         if (command == "help" || command == "h") {
-            response = "Available commands: /help <or /h>, /nick <name> <or /n>, /list <or /l>";
+            response = "Available commands: /help <or /h>, /nick <name> <or /n>, /list <or /l>, /quit <or /q>";
         } else if (command == "list" || command == "l") {
             response = "Online users: ";
             for (const auto& c : all_clients) {
@@ -46,6 +49,10 @@ void handleMessage(shared_ptr<BaseClient> client, const char* buffer, int len) {
             }
             client->set_username(arg);
             response = "Nickname changed to " + arg;
+        } else if (command == "quit" || command == "q") {
+            response = "Goodbye";
+            client->send_packet(response.c_str(), response.length());
+            client->set_inactive();
         } else {
             response = "Unknown command. Type /help for a list of commands.";
         }
@@ -58,19 +65,13 @@ void handleMessage(shared_ptr<BaseClient> client, const char* buffer, int len) {
     char time_str[100];
     strftime(time_str, sizeof(time_str), "%a %b %d %H:%M:%S %Y", localtime(&now));
     string full_message = string(time_str) + " " + client->username + " Said: " + msg;
-    for (auto it = all_clients.begin(); it != all_clients.end(); ) {
-        if ((*it) == client) {
-            ++it;
-            continue;
-        }
+    for (auto it = all_clients.begin(); it != all_clients.end(); it++) {
+        if ((*it) == client || !(*it)->is_active) continue;
         int result = (*it)->send_packet(full_message.c_str(), full_message.length());
 
         if (result < 0 && (*it)->type == TCP) {
-            printf("TCP client %s disconnected, fd id: %d\n", (*it)->username.c_str(), (*it)->sock);
-            CLOSESOCKET((*it)->sock);
-            it = all_clients.erase(it);
-        } else {
-            ++it;
+            printf("TCP client %s send failed, set fd id: %d inactive\n", (*it)->username.c_str(), (*it)->sock);
+            (*it)->set_inactive();
         }
     }
 }
@@ -115,17 +116,37 @@ int main() {
 
     char buffer[BUFFER_SIZE];
 
-    fd_set master_fds;
-    FD_ZERO(&master_fds);
-
-    // set read_fds bit for tcp_listen and udp_socket
-    FD_SET(tcp_listen, &master_fds);
-    FD_SET(udp_socket, &master_fds);
-    
-    SOCKET max_fd = max(tcp_listen, udp_socket);
-
     while (true) {
-        fd_set working_fds = master_fds;
+        fd_set working_fds;
+        FD_ZERO(&working_fds);
+        FD_SET(tcp_listen, &working_fds);
+        FD_SET(udp_socket, &working_fds);
+        SOCKET max_fd = max(tcp_listen, udp_socket);
+        
+        time_t now = time(nullptr);
+
+        for (auto it = all_clients.begin(); it != all_clients.end(); ) {
+            // handle udp client timeout
+            if ((*it)->type == UDP) {
+                auto uc = static_pointer_cast<UDPClient>(*it);
+                if (now - uc->last_seen > 60) (*it)->set_inactive(); 
+            }
+            // rebuild fd_set for next select and handle client removal (lazy removal)
+            if ((*it)->is_active) {
+                if ((*it)->type == TCP) {
+                    FD_SET((*it)->sock, &working_fds);
+                    max_fd = max(max_fd, (*it)->sock);
+                }
+                ++it;
+            } else {
+                // close socket if tcp client, we don't close udp socket since all udp client share the same socket
+                if ((*it)->type == TCP) {
+                    CLOSESOCKET((*it)->sock);
+                }
+                it = all_clients.erase(it);
+            }
+        }
+
         if (select(max_fd + 1, &working_fds, NULL, NULL, NULL) < 0) break;
 
         // Handle TCP connection
@@ -136,38 +157,23 @@ int main() {
             if (ISVALIDSOCKET(new_sock)) {
                 auto new_client = make_shared<TCPClient>(new_sock);
                 all_clients.push_back(new_client);
-                FD_SET(new_sock, &master_fds);
-                max_fd = max(max_fd, new_sock);
             }
         }
 
         // Handle TCP client messages
-        for (auto it = all_clients.begin(); it != all_clients.end(); ) {
+        for (auto it = all_clients.begin(); it != all_clients.end(); it++) {
             shared_ptr<BaseClient> client = *it;
-            bool disconnected = false;
-            
             // skip if not tcp client
-            if (client->type != TCP) {
-                ++it;
-                continue;
-            }
+            if (client->type != TCP) continue;
             SOCKET s = static_pointer_cast<TCPClient>(client)->sock;
             if (FD_ISSET(s, &working_fds)) {
                 int bytes = recv(s, buffer, BUFFER_SIZE - 1, 0);
                 if (bytes <= 0) {
-                    printf("TCP client %s disconnected, fd id: %d\n", client->username.c_str(), s);
-                    CLOSESOCKET(s);
-                    disconnected = true;
+                    client->set_inactive();
                 } else {
                     buffer[bytes] = 0;
                     handleMessage(client, buffer, bytes);
                 }
-            }
-            if (disconnected) {
-                it = all_clients.erase(it);
-                FD_CLR(s, &master_fds);
-            } else {
-                ++it;
             }
         }
 
@@ -201,10 +207,6 @@ int main() {
                 // if not found, create new UDP client
                 if (!sender) {
                     sender = make_shared<UDPClient>(udp_socket, client_addr, addr_len);
-                    char host[NI_MAXHOST];
-                    char serv[NI_MAXSERV];
-                    getnameinfo((struct sockaddr*)&client_addr, addr_len, host, sizeof(host), serv, sizeof(serv), NI_NUMERICHOST | NI_NUMERICSERV);
-                    sender->set_username(string(host) + ":" + string(serv));
                     all_clients.push_back(sender);
                 }
 

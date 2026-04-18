@@ -27,15 +27,18 @@ public:
     SOCKET sock;
     string username;
     time_t last_seen;
+    bool is_active;
     BaseClient(ClientType t, SOCKET s) : type(t), sock(s) {
         last_seen = time(nullptr);
         char rand_str_buf[10];
         rand_str(rand_str_buf, sizeof(rand_str_buf)-1);
         username = "Guest-" + string(rand_str_buf);
+        is_active = true;
     }
     virtual ~BaseClient() {}
     virtual int send_packet(const char* data, int len) = 0;
     virtual void set_username(const string& name) = 0;
+    virtual void set_inactive() = 0;
 };
 
 class TCPClient : public BaseClient {
@@ -52,6 +55,11 @@ public:
     void set_username(const string& name) override {
         username = name;
         printf("TCP client set username to %s, fd id: %d\n", name.c_str(), sock);
+    }
+
+    void set_inactive() override {
+        printf("TCP client %s, fd id: %d is inactive\n", username.c_str(), sock);
+        is_active = false;
     }
 };
 
@@ -72,6 +80,11 @@ public:
     void set_username(const string& name) override {
         username = name;
         printf("UDP client set username to %s, fd id: %d\n", name.c_str(), sock);
+    }
+
+    void set_inactive() override {
+        printf("UDP client %s, fd id: %d is inactive\n", username.c_str(), sock);
+        is_active = false;
     }
 };
 
