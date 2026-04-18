@@ -190,12 +190,13 @@ int main(int argc, char* argv[]) {
                 continue;
             }
 
-            if (msg == "/quit" || msg == "/q") break;
-
             last_sent_msg = msg;
             if (use_tcp) send(s, msg.c_str(), (int)msg.length(), 0);
             else sendto(s, msg.c_str(), (int)msg.length(), 0, (struct sockaddr*)&server_addr, addr_len);
             
+            // quit after sending /quit or /q
+            if (msg == "/quit" || msg == "/q") break;
+
             if (msg[0] != '/'){
                 printf("\033[1A\r" BOLD GREEN "> " RESET "%s " GRAY "(sending message...)" RESET "\n" BOLD GREEN "> " RESET, msg.c_str());
             } else {
