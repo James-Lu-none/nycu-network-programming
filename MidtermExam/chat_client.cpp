@@ -113,69 +113,70 @@ int main(int argc, char* argv[]) {
     struct timeval tv;
     tv.tv_sec = 0;
     tv.tv_usec = 100000; // 100ms
-    
-    string prev_msg = "";
 
     time_t last_ping = time(nullptr);
 
     char buffer[BUFFER_SIZE];
+
     while (true) {
         fd_set read_fds;
         FD_ZERO(&read_fds);
         FD_SET(s, &read_fds);
+
+        int max_fd = (int)s;
+
 #if !defined(_WIN32) && !defined(_WIN64)
-        FD_SET(0, &read_fds); // STDIN
+        FD_SET(0, &read_fds);
+        max_fd = max((int)s, 0);
 #endif
 
-        time_t now = time(nullptr);
+        int select_res = select(max_fd + 1, &read_fds, NULL, NULL, &tv);
 
-        if (now - last_ping >= 5) {
-            if (use_tcp) {
-                send(s, "/ping", 5, 0);
-            } else {
-                sendto(s, "/ping", 5, 0, (struct sockaddr*)&server_addr, addr_len);
-            }
-            last_ping = now;
-        }
-
-        int select_res = select(s + 1, &read_fds, NULL, NULL, &tv);
-        if (select_res < 0) break;
-
-        // Message from server
-        if (FD_ISSET(s, &read_fds)) {
-            int bytes;
-            if (use_tcp) {
-                bytes = recv(s, buffer, BUFFER_SIZE - 1, 0);
-            } else {
-                bytes = recvfrom(s, buffer, BUFFER_SIZE - 1, 0, NULL, NULL);
-            }
-
+        if (select_res > 0 && FD_ISSET(s, &read_fds)) {
+            int bytes = (use_tcp) ? recv(s, buffer, BUFFER_SIZE - 1, 0) 
+                                : recvfrom(s, buffer, BUFFER_SIZE - 1, 0, NULL, NULL);
             if (bytes <= 0) {
-                if (use_tcp) printf("Server disconnected.\n");
+                printf("\nDisconnected from server.\n");
                 break;
             }
             buffer[bytes] = 0;
-            printf("%s\n", buffer);
+            printf("\r%s\n> ", buffer);
             fflush(stdout);
         }
 
-        // Input from user (Linux/Unix)
+        // send /ping to server every 5 seconds
+        time_t now = time(nullptr);
+        if (now - last_ping >= 5) {
+            if (use_tcp) send(s, "/ping", 5, 0);
+            else sendto(s, "/ping", 5, 0, (struct sockaddr*)&server_addr, addr_len);
+            last_ping = now;
+        }
+
+        bool has_input = false;
 #if !defined(_WIN32) && !defined(_WIN64)
-        if (FD_ISSET(0, &read_fds)) {
-            printf("> ");
-            fflush(stdout);
+        if (select_res > 0 && FD_ISSET(0, &read_fds)) has_input = true;
+#else
+        if (_kbhit()) has_input = true;
+#endif
+
+        if (has_input) {
             if (!fgets(buffer, BUFFER_SIZE, stdin)) break;
             string msg(buffer);
-            if (msg.find("/quit") == 0) break;
-            
-            if (use_tcp) {
-                send(s, msg.c_str(), msg.length(), 0);
-            } else {
-                sendto(s, msg.c_str(), msg.length(), 0, (struct sockaddr*)&server_addr, addr_len);
+            msg.erase(msg.find_last_not_of("\n\r") + 1);
+
+            if (msg.empty()) {
+                printf("> "); fflush(stdout);
+                continue;
             }
+
+            if (msg == "/quit") break;
+
+            if (use_tcp) send(s, msg.c_str(), (int)msg.length(), 0);
+            else sendto(s, msg.c_str(), (int)msg.length(), 0, (struct sockaddr*)&server_addr, addr_len);
+            
+            printf("> ");
+            fflush(stdout);
         }
-#else
-#endif
     }
 
     CLOSESOCKET(s);
