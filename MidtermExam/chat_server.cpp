@@ -19,6 +19,9 @@ using namespace std;
 vector<shared_ptr<BaseClient>> all_clients;
 void handleMessage(shared_ptr<BaseClient> client, const char* buffer, int len) {
     string msg(buffer, len);
+    time_t now = time(nullptr);
+    char time_str[100];
+    strftime(time_str, sizeof(time_str), "%a %b %d %H:%M:%S %Y", localtime(&now));
     if (!msg.empty() && msg.back() == '\n') msg.pop_back();
     if (!msg.empty() && msg.back() == '\r') msg.pop_back();
 
@@ -83,7 +86,7 @@ void handleMessage(shared_ptr<BaseClient> client, const char* buffer, int len) {
                 response = "User not found";
                 client->send_packet(response.c_str(), response.length());
             } else {
-                response = "Direct message from " + client->username + ": ";
+                response = string(time_str) + "Direct message from " + client->username + ": ";
                 for (size_t i = 1; i < args.size(); i++) {
                     response += args[i] + " ";
                 }
@@ -91,9 +94,8 @@ void handleMessage(shared_ptr<BaseClient> client, const char* buffer, int len) {
             }
             return;
         } else if (command == "ping" || command == "p") {
-            // update last seen and handle message for new or found UDP client
+            response = "pong";
             client->last_seen = time(nullptr);
-            return;
         } else {
             response = "Unknown command. Type /help for a list of commands.";
         }
@@ -102,16 +104,12 @@ void handleMessage(shared_ptr<BaseClient> client, const char* buffer, int len) {
     }
 
     // broadcast message
-    time_t now = time(nullptr);
-    char time_str[100];
-    strftime(time_str, sizeof(time_str), "%a %b %d %H:%M:%S %Y", localtime(&now));
     string full_message = string(time_str) + " " + client->username + " Said: " + msg;
     for (auto it = all_clients.begin(); it != all_clients.end(); it++) {
         if ((*it) == client || !(*it)->is_active) continue;
         int result = (*it)->send_packet(full_message.c_str(), full_message.length());
 
         if (result < 0 && (*it)->type == TCP) {
-            printf("TCP client %s send failed, set fd id: %d inactive\n", (*it)->username.c_str(), (*it)->sock);
             (*it)->set_inactive();
         }
     }

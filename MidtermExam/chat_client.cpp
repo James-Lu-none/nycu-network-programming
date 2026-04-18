@@ -115,6 +115,8 @@ int main(int argc, char* argv[]) {
     tv.tv_usec = 100000; // 100ms
 
     time_t last_ping = time(nullptr);
+    time_t last_pong = time(nullptr);
+    int ping_fail_count = 0;
 
     char buffer[BUFFER_SIZE];
 
@@ -139,6 +141,11 @@ int main(int argc, char* argv[]) {
                 printf("\nDisconnected from server.\n");
                 break;
             }
+            if (strcmp(buffer, "pong") == 0) {
+                last_pong = time(nullptr);
+                ping_fail_count = 0;
+                continue;
+            }
             buffer[bytes] = 0;
             printf("\r%s\n> ", buffer);
             fflush(stdout);
@@ -150,6 +157,12 @@ int main(int argc, char* argv[]) {
             if (use_tcp) send(s, "/ping", 5, 0);
             else sendto(s, "/ping", 5, 0, (struct sockaddr*)&server_addr, addr_len);
             last_ping = now;
+            ping_fail_count++;
+        }
+
+        if (ping_fail_count >= 3) {
+            printf("\nServer timeout after 3 ping failures.\n");
+            break;
         }
 
         bool has_input = false;
