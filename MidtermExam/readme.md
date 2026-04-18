@@ -32,6 +32,8 @@
 4. `/nick` command to change nickname.
 5. `/quit` command to quit the server.
 6. `/ping` command to update last seen time. (only logs on server side, quiet on client side)
+7. ANSI color codes to colorize the output.
+8. centralized logging system to log all events and messages.
 
 ## observations
 
