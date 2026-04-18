@@ -141,7 +141,6 @@ int main(int argc, char* argv[]) {
                 break;
             }
             if (strcmp(buffer, "pong") == 0) {
-                last_pong = time(nullptr);
                 ping_fail_count = 0;
                 continue;
             }
