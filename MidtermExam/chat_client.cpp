@@ -115,7 +115,6 @@ int main(int argc, char* argv[]) {
     tv.tv_usec = 100000; // 100ms
 
     time_t last_ping = time(nullptr);
-    time_t last_pong = time(nullptr);
     int ping_fail_count = 0;
 
     char buffer[BUFFER_SIZE];
