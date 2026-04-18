@@ -27,37 +27,69 @@ void handleMessage(shared_ptr<BaseClient> client, const char* buffer, int len) {
         string response;
         // split msg by space
         size_t space_pos = msg.find(' ');
-        string command, arg;
+        string command;
+        vector<string> args;
         if (space_pos == string::npos) {
             command = msg.substr(1);
-            arg = "";
+            args.clear();
         } else {
             command = msg.substr(1, space_pos - 1);
-            arg = msg.substr(space_pos + 1);
+            // push arg until last space
+            while (space_pos != string::npos) {
+                size_t space_pos2 = msg.find(' ', space_pos + 1);
+                if (space_pos2 != string::npos) {
+                    args.push_back(msg.substr(space_pos + 1, space_pos2 - space_pos - 1));
+                } else {
+                    args.push_back(msg.substr(space_pos + 1));
+                }
+                space_pos = space_pos2;
+            }
         }
         printf("Received command: %s from %s\n", command.c_str(), client->username.c_str());
         if (command == "help" || command == "h") {
             response = "Available commands: \n"
-            "/help <or /h>\n"
-            "/nick <name> <or /n>\n"
-            "/list <or /l>\n"
-            "/quit <or /q>";
+            "/help <or /h>: show this message\n"
+            "/nick <name> <or /n>: change nickname\n"
+            "/list <or /l>: list all active users\n"
+            "/dm <name> <message> <or /d>: send direct message to a user\n"
+            "/ping <or /p>: update last seen time\n"
+            "/quit <or /q>: quit the server";
         } else if (command == "list" || command == "l") {
-            response = "Online users: ";
+            response = "Active users: ";
             for (const auto& c : all_clients) {
                 response += c->username + ", ";
             }
         } else if (command == "nick" || command == "n") {
-            if (arg.empty()) {
+            if (args.empty()) {
                 response = "Usage: /nick <name>";
                 return;
             }
-            client->set_username(arg);
-            response = "Nickname changed to " + arg;
+            client->set_username(args[0]);
+            response = "Nickname changed to " + args[0];
         } else if (command == "quit" || command == "q") {
             response = "Goodbye";
             client->send_packet(response.c_str(), response.length());
             client->set_inactive();
+        } else if (command == "dm" || command == "d") {
+            if (args.size() < 2) {
+                response = "Usage: /dm <name> <message>";
+                client->send_packet(response.c_str(), response.length());
+                return;
+            }
+            auto it = find_if(all_clients.begin(), all_clients.end(), [&](const shared_ptr<BaseClient>& c) {
+                return c->username == args[0];
+            });
+            if (it == all_clients.end()) {
+                response = "User not found";
+                client->send_packet(response.c_str(), response.length());
+            } else {
+                response = "Direct message from " + client->username + ": ";
+                for (size_t i = 1; i < args.size(); i++) {
+                    response += args[i] + " ";
+                }
+                (*it)->send_packet(response.c_str(), response.length());
+            }
+            return;
         } else if (command == "ping" || command == "p") {
             // update last seen and handle message for new or found UDP client
             client->last_seen = time(nullptr);
@@ -121,7 +153,7 @@ int main() {
     freeaddrinfo(res);
     freeaddrinfo(res_udp);
 
-    cout << "Server listening on port " << port << " (TCP & UDP)" << endl;
+    printf("Server listening on port %s (TCP & UDP)\n", port);
 
     char buffer[BUFFER_SIZE];
 
