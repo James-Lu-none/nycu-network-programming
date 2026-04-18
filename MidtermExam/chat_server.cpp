@@ -14,9 +14,23 @@ using namespace std;
 
 #define MAX_CLIENTS 100
 #define BUFFER_SIZE 4096
+#include "colors.h"
 
 // use shared_ptr so we dont have to worry about memory leak and Object Slicing
 vector<shared_ptr<BaseClient>> all_clients;
+
+void broadcastSystemMessage(const string& msg, shared_ptr<BaseClient> exclude = nullptr) {
+    time_t now = time(nullptr);
+    char time_str[100];
+    strftime(time_str, sizeof(time_str), "%a %b %d %H:%M:%S %Y", localtime(&now));
+    
+    string full_message = string(GRAY) + "[" + time_str + "] " + RESET + BOLD YELLOW "[SYSTEM] " + RESET + CYAN + msg + RESET;
+    for (auto& client : all_clients) {
+        if (client == exclude || !client->is_active) continue;
+        client->send_packet(full_message.c_str(), full_message.length());
+    }
+}
+
 void handleMessage(shared_ptr<BaseClient> client, const char* buffer, int len) {
     string msg(buffer, len);
     time_t now = time(nullptr);
@@ -50,34 +64,35 @@ void handleMessage(shared_ptr<BaseClient> client, const char* buffer, int len) {
         }
         printf("Received command: %s from %s\n", command.c_str(), client->username.c_str());
         if (command == "help" || command == "h") {
-            response = "Available commands: \n"
-            "/help <or /h>: show this message\n"
+            response = string(BOLD CYAN) + "Available commands: \n" + RESET +
+            CYAN "/help <or /h>: show this message\n"
             "/nick <name> <or /n>: change nickname\n"
             "/list <or /l>: list all active users\n"
             "/dm <name> <message> <or /d>: send direct message to a user\n"
             "/ping <or /p>: update last seen time\n"
-            "/quit <or /q>: quit the server";
+            "/quit <or /q>: quit the server" RESET;
         } else if (command == "list" || command == "l") {
-            response = "Active users: ";
+            response = string(BOLD CYAN) + "Active users: " + RESET + WHITE;
             for (const auto& c : all_clients) {
                 response += c->username + ", ";
             }
             response.pop_back();
             response.pop_back();
+            response += RESET;
         } else if (command == "nick" || command == "n") {
             if (args.size() != 1) {
-                response = "Usage: /nick <name>";
+                response = string(RED) + "Usage: /nick <name>" + RESET;
                 client->send_packet(response.c_str(), response.length());
                 return;
             }
             client->set_username(args[0]);
-            response = "Nickname changed to " + args[0];
+            response = string(CYAN) + "Nickname changed to " + BOLD WHITE + args[0] + RESET;
         } else if (command == "quit" || command == "q") {
-            response = "Goodbye";
+            response = string(CYAN) + "Goodbye" + RESET;
             client->set_inactive();
         } else if (command == "dm" || command == "d") {
             if (args.size() < 2) {
-                response = "Usage: /dm <name> <message>";
+                response = string(RED) + "Usage: /dm <name> <message>" + RESET;
                 client->send_packet(response.c_str(), response.length());
                 return;
             }
@@ -85,14 +100,20 @@ void handleMessage(shared_ptr<BaseClient> client, const char* buffer, int len) {
                 return c->username == args[0];
             });
             if (it == all_clients.end()) {
-                response = "User not found";
+                response = string(RED) + "User not found" + RESET;
                 client->send_packet(response.c_str(), response.length());
             } else {
-                response = string(time_str) + "Direct message from " + client->username + ": ";
+                response = string(GRAY) + "[" + time_str + "] " + RESET + client->get_protocol_prefix() + 
+                           " " + MAGENTA + "Direct message from " + BOLD + client->username + RESET + MAGENTA + ": ";
                 for (size_t i = 1; i < args.size(); i++) {
                     response += args[i] + " ";
                 }
+                response += RESET;
                 (*it)->send_packet(response.c_str(), response.length());
+                
+                // Also give feedback to the sender
+                string feedback = string(CYAN) + "Message sent to " + BOLD WHITE + args[0] + RESET;
+                client->send_packet(feedback.c_str(), feedback.length());
             }
             return;
         } else if (command == "ping" || command == "p") {
@@ -106,7 +127,8 @@ void handleMessage(shared_ptr<BaseClient> client, const char* buffer, int len) {
     }
 
     // broadcast message
-    string full_message = string(time_str) + " " + client->username + " Said: " + msg;
+    string full_message = string(GRAY) + "[" + time_str + "] " + RESET + client->get_protocol_prefix() + 
+                          " " + BOLD WHITE + client->username + RESET + " Said: " + msg;
     for (auto it = all_clients.begin(); it != all_clients.end(); it++) {
         if ((*it) == client || !(*it)->is_active) continue;
         int result = (*it)->send_packet(full_message.c_str(), full_message.length());
@@ -188,6 +210,7 @@ int main() {
                 if ((*it)->type == TCP) {
                     CLOSESOCKET((*it)->sock);
                 }
+                broadcastSystemMessage((*it)->username + " left the chat");
                 it = all_clients.erase(it);
             }
         }
@@ -202,6 +225,7 @@ int main() {
             if (ISVALIDSOCKET(new_sock)) {
                 auto new_client = make_shared<TCPClient>(new_sock);
                 all_clients.push_back(new_client);
+                broadcastSystemMessage(new_client->username + " joined the chat via TCP", new_client);
             }
         }
 
@@ -253,6 +277,7 @@ int main() {
                 if (!sender) {
                     sender = make_shared<UDPClient>(udp_socket, client_addr, addr_len);
                     all_clients.push_back(sender);
+                    broadcastSystemMessage(sender->username + " joined the chat via UDP", sender);
                 }
                 handleMessage(sender, buffer, bytes);
             }

@@ -2,6 +2,7 @@
 #define CLIENT_TYPES_H
 
 #include "socket_compact.h"
+#include "colors.h"
 #include <string>
 #include <vector>
 #include <memory>
@@ -39,6 +40,7 @@ public:
     virtual int send_packet(const char* data, int len) = 0;
     virtual void set_username(const string& name) = 0;
     virtual void set_inactive() = 0;
+    virtual string get_protocol_prefix() const = 0;
 };
 
 class TCPClient : public BaseClient {
@@ -60,6 +62,10 @@ public:
     void set_inactive() override {
         printf("TCP client %s, fd id: %d is inactive\n", username.c_str(), sock);
         is_active = false;
+    }
+
+    string get_protocol_prefix() const override {
+        return string(BOLD GREEN "[TCP]" RESET);
     }
 };
 
@@ -85,6 +91,10 @@ public:
     void set_inactive() override {
         printf("UDP client %s, fd id: %d is inactive\n", username.c_str(), sock);
         is_active = false;
+    }
+
+    string get_protocol_prefix() const override {
+        return string(BOLD BLUE "[UDP]" RESET);
     }
 };
 

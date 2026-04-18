@@ -1,4 +1,5 @@
 #include "socket_compact.h"
+#include "colors.h"
 #include <iostream>
 #include <string>
 #include <cstring>
@@ -145,7 +146,7 @@ int main(int argc, char* argv[]) {
                 ping_fail_count = 0;
             } else {
                 buffer[bytes] = 0;
-                printf("\r%s\n> ", buffer);
+                printf("\r%s\n" BOLD GREEN "> " RESET, buffer);
                 fflush(stdout);
             }
         }
@@ -177,7 +178,7 @@ int main(int argc, char* argv[]) {
             msg.erase(msg.find_last_not_of("\n\r") + 1);
 
             if (msg.empty()) {
-                printf("> "); fflush(stdout);
+                printf(BOLD GREEN "> " RESET); fflush(stdout);
                 continue;
             }
 
@@ -186,7 +187,7 @@ int main(int argc, char* argv[]) {
             if (use_tcp) send(s, msg.c_str(), (int)msg.length(), 0);
             else sendto(s, msg.c_str(), (int)msg.length(), 0, (struct sockaddr*)&server_addr, addr_len);
             
-            printf("> ");
+            printf(BOLD GREEN "> " RESET);
             fflush(stdout);
         }
     }
