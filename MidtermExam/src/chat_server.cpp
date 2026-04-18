@@ -126,11 +126,6 @@ int main() {
                     if (bytes <= 0) {
                         client->set_inactive();
                     } else {
-                        int result = client->send_packet(buffer, bytes);
-                        if (result < 0) {
-                            LOG_ERROR("Failed to send packet to client %s", client->username.c_str());
-                            client->set_inactive();
-                        }
                         buffer[bytes] = 0;
                         chat_server.handleMessage(client, buffer, bytes);
                     }
