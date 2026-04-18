@@ -118,6 +118,7 @@ int main(int argc, char* argv[]) {
 
     time_t last_ping = time(nullptr);
     int ping_fail_count = 0;
+    string last_sent_msg = "";
 
     char buffer[BUFFER_SIZE];
 
@@ -143,8 +144,14 @@ int main(int argc, char* argv[]) {
                 break;
             }
             // if receive start with "pong" 
-            if (strncmp(buffer, "pong", 4) == 0) {
+            if (strncmp(buffer, "[PONG]", 6) == 0) {
                 ping_fail_count = 0;
+            } else if (strncmp(buffer, "[SENT]", 6) == 0) {
+                // move cursor up 1 line, go to start, and overwrite with (message sent) appended
+                if (!last_sent_msg.empty()) {
+                    printf("\033[1A\r" BOLD GREEN "> " RESET "%s " GRAY "(message sent)" RESET "\n" BOLD GREEN "> " RESET, last_sent_msg.c_str());
+                    fflush(stdout);
+                }
             } else {
                 buffer[bytes] = 0;
                 printf("\r%s\n" BOLD GREEN "> " RESET, buffer);
@@ -185,6 +192,7 @@ int main(int argc, char* argv[]) {
 
             if (msg == "/quit" || msg == "/q") break;
 
+            last_sent_msg = msg;
             if (use_tcp) send(s, msg.c_str(), (int)msg.length(), 0);
             else sendto(s, msg.c_str(), (int)msg.length(), 0, (struct sockaddr*)&server_addr, addr_len);
             

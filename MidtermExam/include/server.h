@@ -43,6 +43,9 @@ public:
                 (*it)->set_inactive();
             }
         }
+        // Send ACK back to sender
+        string ack = "[SENT]";
+        sender->send_packet(ack.c_str(), (int)ack.length());
     }
 
     void handleCommand(const string& msg, shared_ptr<BaseClient> client) {
@@ -120,7 +123,7 @@ public:
                 }
             }
         } else if (command == "ping" || command == "p") {
-            response = "pong";
+            response = "[PONG]";
             client->last_seen = time(nullptr);
         } else {
             response = string(RED) + "Unknown command. Type /help for a list of commands." + RESET;
