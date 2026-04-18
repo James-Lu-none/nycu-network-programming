@@ -25,7 +25,7 @@ int try_tcp_connection(const char* host, const char* port, SOCKET* s_out) {
         return 1;
     }
     if (connect(*s_out, res->ai_addr, res->ai_addrlen) < 0) {
-        LOG_ERROR("TCP connection failed. Falling back to UDP...");
+        LOG_ERROR("TCP connection failed.");
         if (ISVALIDSOCKET(*s_out)) CLOSESOCKET(*s_out);
         return 1;
     }
@@ -74,7 +74,7 @@ int try_udp_connection(const char* host, const char* port, SOCKET* s_out, struct
         }
     }
 
-    LOG_ERROR("UDP connection handshake failed (timeout or invalid response)");
+    LOG_ERROR("UDP connection handshake failed");
     freeaddrinfo(res);
     CLOSESOCKET(*s_out);
     return 1;
@@ -109,17 +109,13 @@ int main(int argc, char* argv[]) {
     switch (protocol[0]) {
         case 't':
             if (try_tcp_connection(host, port, &s) != 0) {
-                LOG_ERROR("TCP connection failed. Falling back to UDP...");
-                if (try_udp_connection(host, port, &s, &server_addr, &addr_len) != 0) {
-                    return 1;
-                }
+                LOG_INFO("Falling back to UDP...");
+                if (try_udp_connection(host, port, &s, &server_addr, &addr_len) != 0) return 1;
             }
             use_tcp = true;
             break;
         case 'u':
-            if (try_udp_connection(host, port, &s, &server_addr, &addr_len) != 0) {
-                return 1;
-            }
+            if (try_udp_connection(host, port, &s, &server_addr, &addr_len) != 0) return 1;
             use_tcp = false;
             break;
         default:
