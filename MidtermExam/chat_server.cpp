@@ -35,8 +35,13 @@ void handleMessage(shared_ptr<BaseClient> client, const char* buffer, int len) {
             command = msg.substr(1, space_pos - 1);
             arg = msg.substr(space_pos + 1);
         }
+        printf("Received command: %s from %s\n", command.c_str(), client->username.c_str());
         if (command == "help" || command == "h") {
-            response = "Available commands: /help <or /h>, /nick <name> <or /n>, /list <or /l>, /quit <or /q>";
+            response = "Available commands: \n"
+            "/help <or /h>\n"
+            "/nick <name> <or /n>\n"
+            "/list <or /l>\n"
+            "/quit <or /q>";
         } else if (command == "list" || command == "l") {
             response = "Online users: ";
             for (const auto& c : all_clients) {
@@ -53,6 +58,10 @@ void handleMessage(shared_ptr<BaseClient> client, const char* buffer, int len) {
             response = "Goodbye";
             client->send_packet(response.c_str(), response.length());
             client->set_inactive();
+        } else if (command == "ping" || command == "p") {
+            // update last seen and handle message for new or found UDP client
+            client->last_seen = time(nullptr);
+            return;
         } else {
             response = "Unknown command. Type /help for a list of commands.";
         }
@@ -116,6 +125,10 @@ int main() {
 
     char buffer[BUFFER_SIZE];
 
+    struct timeval tv;
+    tv.tv_sec = 0;
+    tv.tv_usec = 100000; // 100ms
+
     while (true) {
         fd_set working_fds;
         FD_ZERO(&working_fds);
@@ -129,7 +142,7 @@ int main() {
             // handle udp client timeout
             if ((*it)->type == UDP) {
                 auto uc = static_pointer_cast<UDPClient>(*it);
-                if (now - uc->last_seen > 60) (*it)->set_inactive(); 
+                if (now - uc->last_seen > 10) (*it)->set_inactive(); 
             }
             // rebuild fd_set for next select and handle client removal (lazy removal)
             if ((*it)->is_active) {
@@ -147,7 +160,7 @@ int main() {
             }
         }
 
-        if (select(max_fd + 1, &working_fds, NULL, NULL, NULL) < 0) break;
+        if (select(max_fd + 1, &working_fds, NULL, NULL, &tv) < 0) break;
 
         // Handle TCP connection
         if (FD_ISSET(tcp_listen, &working_fds)) {
@@ -209,9 +222,6 @@ int main() {
                     sender = make_shared<UDPClient>(udp_socket, client_addr, addr_len);
                     all_clients.push_back(sender);
                 }
-
-                // update last seen and handle message for new or found UDP client
-                sender->last_seen = time(nullptr);
                 handleMessage(sender, buffer, bytes);
             }
         }
