@@ -7,8 +7,8 @@
     - `BaseClient` (in `client.h`) with `TCPClient` and `UDPClient` subclasses provides a polymorphic interface basic operations.
     - Centralized logging (`logging.h`) and color tokens (`colors.h`) are used throughout the project.
 2. heartbeat & lazy deletion:
-    - client pings every 3 seconds and server responds with pong, server updates last_seen time
-    - on client side, if server doesn't respond to ping with pong for 3 times, it will stop and exit
+    - client pings every 3 seconds and server responds with `[PONG]`, server updates last_seen time
+    - on client side, if server doesn't respond to ping with `[PONG]` for 3 times, it will stop and exit
     - on server side, if last_seen time of a client is more than 10 seconds ago, it will be set to inactive for lazy deletion
     - for all disconnection events (including timeout, client quit, etc.), the client will be set to inactive instead of removed immediately
     - in the while loop, before select, iterate all clients and check for is_active, if inactive, remove it from all_clients
@@ -39,6 +39,9 @@
    - `/nick <name>`: Rename user.
    - `/quit`: Graceful disconnect.
    - `/ping`: Manual heartbeat update.
+5. message delivery confirmation:
+    - when a client sends a message, the server will respond with `[SENT]` to indicate that the message has been received
+    - on client side, when it receives `[SENT]`, it will add a `(message sent)` postfix to the message
 
 ## observations
 
