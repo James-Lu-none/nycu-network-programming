@@ -143,11 +143,11 @@ int main(int argc, char* argv[]) {
             // if receive start with "pong" 
             if (strncmp(buffer, "pong", 4) == 0) {
                 ping_fail_count = 0;
-                continue;
+            } else {
+                buffer[bytes] = 0;
+                printf("\r%s\n> ", buffer);
+                fflush(stdout);
             }
-            buffer[bytes] = 0;
-            printf("\r%s\n> ", buffer);
-            fflush(stdout);
         }
 
         // send /ping to server every 5 seconds
@@ -181,7 +181,7 @@ int main(int argc, char* argv[]) {
                 continue;
             }
 
-            if (msg == "/quit") break;
+            if (msg == "/quit" || msg == "/q") break;
 
             if (use_tcp) send(s, msg.c_str(), (int)msg.length(), 0);
             else sendto(s, msg.c_str(), (int)msg.length(), 0, (struct sockaddr*)&server_addr, addr_len);

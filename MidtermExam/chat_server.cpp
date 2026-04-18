@@ -62,16 +62,18 @@ void handleMessage(shared_ptr<BaseClient> client, const char* buffer, int len) {
             for (const auto& c : all_clients) {
                 response += c->username + ", ";
             }
+            response.pop_back();
+            response.pop_back();
         } else if (command == "nick" || command == "n") {
-            if (args.empty()) {
+            if (args.size() != 1) {
                 response = "Usage: /nick <name>";
+                client->send_packet(response.c_str(), response.length());
                 return;
             }
             client->set_username(args[0]);
             response = "Nickname changed to " + args[0];
         } else if (command == "quit" || command == "q") {
             response = "Goodbye";
-            client->send_packet(response.c_str(), response.length());
             client->set_inactive();
         } else if (command == "dm" || command == "d") {
             if (args.size() < 2) {
