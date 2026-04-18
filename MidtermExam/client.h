@@ -3,6 +3,7 @@
 
 #include "socket_compact.h"
 #include "colors.h"
+#include "logging.h"
 #include <string>
 #include <vector>
 #include <memory>
@@ -46,21 +47,21 @@ public:
 class TCPClient : public BaseClient {
 public:
     TCPClient(SOCKET s): BaseClient(TCP, s) {
-        printf("TCP client connected, fd id: %d, username: %s\n", s, username.c_str());
+        LOG_INFO("TCP client connected, fd id: %d, username: %s", (int)s, username.c_str());
     }
 
     int send_packet(const char* data, int len) override {
-        printf("Sending packet to TCP client %s, fd id: %d\n", username.c_str(), sock);
+        LOG_DEBUG("Sending packet to TCP client %s, fd id: %d", username.c_str(), (int)sock);
         return send(sock, data, len, 0);
     }
 
     void set_username(const string& name) override {
         username = name;
-        printf("TCP client set username to %s, fd id: %d\n", name.c_str(), sock);
+        LOG_INFO("TCP client set username to %s, fd id: %d", name.c_str(), (int)sock);
     }
 
     void set_inactive() override {
-        printf("TCP client %s, fd id: %d is inactive\n", username.c_str(), sock);
+        LOG_INFO("TCP client %s, fd id: %d is inactive", username.c_str(), (int)sock);
         is_active = false;
     }
 
@@ -75,21 +76,21 @@ public:
     socklen_t addr_len;
 
     UDPClient(SOCKET s, struct sockaddr_storage a, socklen_t l): BaseClient(UDP, s), addr(a), addr_len(l) {
-        printf("UDP client connected, fd id: %d, username: %s\n", s, username.c_str());
+        LOG_INFO("UDP client connected, fd id: %d, username: %s", (int)s, username.c_str());
     }
 
     int send_packet(const char* data, int len) override {
-        printf("Sending packet to UDP client %s, fd id: %d\n", username.c_str(), sock);
+        LOG_DEBUG("Sending packet to UDP client %s, fd id: %d", username.c_str(), (int)sock);
         return sendto(sock, data, len, 0, (struct sockaddr*)&addr, addr_len);
     }
 
     void set_username(const string& name) override {
         username = name;
-        printf("UDP client set username to %s, fd id: %d\n", name.c_str(), sock);
+        LOG_INFO("UDP client set username to %s, fd id: %d", name.c_str(), (int)sock);
     }
 
     void set_inactive() override {
-        printf("UDP client %s, fd id: %d is inactive\n", username.c_str(), sock);
+        LOG_INFO("UDP client %s, fd id: %d is inactive", username.c_str(), (int)sock);
         is_active = false;
     }
 

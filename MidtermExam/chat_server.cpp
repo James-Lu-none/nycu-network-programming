@@ -9,12 +9,12 @@
 
 #include "socket_compact.h"
 #include "client.h"
+#include "colors.h"
 
 using namespace std;
 
 #define MAX_CLIENTS 100
 #define BUFFER_SIZE 4096
-#include "colors.h"
 
 // use shared_ptr so we dont have to worry about memory leak and Object Slicing
 vector<shared_ptr<BaseClient>> all_clients;
@@ -62,7 +62,7 @@ void handleMessage(shared_ptr<BaseClient> client, const char* buffer, int len) {
                 space_pos = space_pos2;
             }
         }
-        printf("Received command: %s from %s\n", command.c_str(), client->username.c_str());
+        LOG_INFO("Received command: /%s from %s", command.c_str(), client->username.c_str());
         if (command == "help" || command == "h") {
             response = string(BOLD CYAN) + "Available commands: \n" + RESET +
             CYAN "/help <or /h>: show this message\n"
@@ -175,7 +175,7 @@ int main() {
     freeaddrinfo(res);
     freeaddrinfo(res_udp);
 
-    printf("Server listening on port %s (TCP & UDP)\n", port);
+    LOG_INFO("Server listening on port %s (TCP & UDP)", port);
 
     char buffer[BUFFER_SIZE];
 
