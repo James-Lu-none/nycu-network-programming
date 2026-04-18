@@ -140,7 +140,8 @@ int main(int argc, char* argv[]) {
                 printf("\nDisconnected from server.\n");
                 break;
             }
-            if (strcmp(buffer, "pong") == 0) {
+            // if receive start with "pong" 
+            if (strncmp(buffer, "pong", 4) == 0) {
                 ping_fail_count = 0;
                 continue;
             }
