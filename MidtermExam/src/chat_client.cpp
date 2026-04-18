@@ -46,13 +46,38 @@ int try_udp_connection(const char* host, const char* port, SOCKET* s_out, struct
     *s_out = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
     if (!ISVALIDSOCKET(*s_out)) {
         LOG_ERROR("UDP failed: Could not create socket");
+        freeaddrinfo(res);
         return 1;
     }
-    memcpy(addr, res->ai_addr, res->ai_addrlen);
-    *len = res->ai_addrlen;
+    // use command /ping to do 2-way handshake
+    sendto(*s_out, "/ping", 5, 0, res->ai_addr, res->ai_addrlen);
+
+    fd_set read_fds;
+    FD_ZERO(&read_fds);
+    FD_SET(*s_out, &read_fds);
+    struct timeval tv;
+    tv.tv_sec = 2; // 2 seconds timeout
+    tv.tv_usec = 0;
+
+    if (select((int)*s_out + 1, &read_fds, NULL, NULL, &tv) > 0) {
+        char buffer[100];
+        int bytes = recvfrom(*s_out, buffer, sizeof(buffer) - 1, 0, NULL, NULL);
+        if (bytes > 0) {
+            buffer[bytes] = 0;
+            if (strncmp(buffer, "[PONG]", 6) == 0) {
+                memcpy(addr, res->ai_addr, res->ai_addrlen);
+                *len = res->ai_addrlen;
+                freeaddrinfo(res);
+                printf("Connected via UDP.\n");
+                return 0;
+            }
+        }
+    }
+
+    LOG_ERROR("UDP connection handshake failed (timeout or invalid response)");
     freeaddrinfo(res);
-    printf("Connected via UDP.\n");
-    return 0;
+    CLOSESOCKET(*s_out);
+    return 1;
 }
 
 int main(int argc, char* argv[]) {
