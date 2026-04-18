@@ -110,6 +110,14 @@ int main(int argc, char* argv[]) {
 
     printf("You can now start chatting! Type /help for commands.\n");
 
+    struct timeval tv;
+    tv.tv_sec = 0;
+    tv.tv_usec = 100000; // 100ms
+    
+    string prev_msg = "";
+
+    time_t last_ping = time(nullptr);
+
     char buffer[BUFFER_SIZE];
     while (true) {
         fd_set read_fds;
@@ -119,9 +127,16 @@ int main(int argc, char* argv[]) {
         FD_SET(0, &read_fds); // STDIN
 #endif
 
-        struct timeval tv;
-        tv.tv_sec = 0;
-        tv.tv_usec = 100000; // 100ms
+        time_t now = time(nullptr);
+
+        if (now - last_ping >= 5) {
+            if (use_tcp) {
+                send(s, "/ping", 5, 0);
+            } else {
+                sendto(s, "/ping", 5, 0, (struct sockaddr*)&server_addr, addr_len);
+            }
+            last_ping = now;
+        }
 
         int select_res = select(s + 1, &read_fds, NULL, NULL, &tv);
         if (select_res < 0) break;
