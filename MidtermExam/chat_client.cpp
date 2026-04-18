@@ -1,5 +1,6 @@
 #include "socket_compact.h"
 #include "colors.h"
+#include "logging.h"
 #include <iostream>
 #include <string>
 #include <cstring>
@@ -15,16 +16,16 @@ int try_tcp_connection(const char* host, const char* port, SOCKET* s_out) {
     hints.ai_socktype = SOCK_STREAM;
     
     if (getaddrinfo(host, port, &hints, &res) != 0) {
-        printf("TCP failed: Could not resolve address\n");
+        LOG_ERROR("TCP failed: Could not resolve address");
         return 1;
     }
     *s_out = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
     if (!ISVALIDSOCKET(*s_out)) {
-        printf("TCP failed: Could not create socket\n");
+        LOG_ERROR("TCP failed: Could not create socket");
         return 1;
     }
     if (connect(*s_out, res->ai_addr, res->ai_addrlen) < 0) {
-        printf("TCP connection failed. Falling back to UDP...\n");
+        LOG_ERROR("TCP connection failed. Falling back to UDP...");
         if (ISVALIDSOCKET(*s_out)) CLOSESOCKET(*s_out);
         return 1;
     }
@@ -39,12 +40,12 @@ int try_udp_connection(const char* host, const char* port, SOCKET* s_out, struct
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_DGRAM;
     if (getaddrinfo(host, port, &hints, &res) != 0) {
-        printf("UDP failed: Could not resolve address\n");
+        LOG_ERROR("UDP failed: Could not resolve address");
         return 1;
     }
     *s_out = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
     if (!ISVALIDSOCKET(*s_out)) {
-        printf("UDP failed: Could not create socket\n");
+        LOG_ERROR("UDP failed: Could not create socket");
         return 1;
     }
     memcpy(addr, res->ai_addr, res->ai_addrlen);

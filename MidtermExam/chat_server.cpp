@@ -20,7 +20,10 @@ using namespace std;
 int main() {
 #if defined(_WIN32) || defined(_WIN64)
     WSADATA wsaData;
-    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) return 1;
+    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
+        LOG_ERROR("WSAStartup failed");
+        return 1;
+    }
 #endif
 
     const char* port = "8080";
@@ -30,25 +33,46 @@ int main() {
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_flags = AI_PASSIVE;
 
-    if (getaddrinfo(NULL, port, &hints, &res) != 0) return 1;
+    if (getaddrinfo(NULL, port, &hints, &res) != 0) {
+        LOG_ERROR("getaddrinfo failed for TCP");
+        return 1;
+    }
 
     // TCP Setup
     SOCKET tcp_listen = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
-    if (!ISVALIDSOCKET(tcp_listen)) return 1;
+    if (!ISVALIDSOCKET(tcp_listen)) {
+        LOG_ERROR("TCP socket creation failed");
+        return 1;
+    }
     
     int opt = 1;
     setsockopt(tcp_listen, SOL_SOCKET, SO_REUSEADDR, (const char*)&opt, sizeof(opt));
 
-    if (bind(tcp_listen, res->ai_addr, res->ai_addrlen) < 0) return 1;
-    if (listen(tcp_listen, 10) < 0) return 1;
+    if (bind(tcp_listen, res->ai_addr, res->ai_addrlen) < 0) {
+        LOG_ERROR("TCP bind failed");
+        return 1;
+    }
+    if (listen(tcp_listen, 10) < 0) {
+        LOG_ERROR("TCP listen failed");
+        return 1;
+    }
 
     // UDP Setup
     hints.ai_socktype = SOCK_DGRAM;
     struct addrinfo *res_udp;
-    if (getaddrinfo(NULL, port, &hints, &res_udp) != 0) return 1;
+    if (getaddrinfo(NULL, port, &hints, &res_udp) != 0) {
+        LOG_ERROR("getaddrinfo failed for UDP");
+        return 1;
+    }
     SOCKET udp_socket = socket(res_udp->ai_family, res_udp->ai_socktype, res_udp->ai_protocol);
-    if (!ISVALIDSOCKET(udp_socket)) return 1;
-    if (bind(udp_socket, res_udp->ai_addr, res_udp->ai_addrlen) < 0) return 1;
+    if (!ISVALIDSOCKET(udp_socket)) {
+        LOG_ERROR("UDP socket creation failed");
+        return 1;
+    }
+    if (bind(udp_socket, res_udp->ai_addr, res_udp->ai_addrlen) < 0) {
+        LOG_ERROR("UDP bind failed");
+        return 1;
+    }
 
     freeaddrinfo(res);
     freeaddrinfo(res_udp);
@@ -102,6 +126,11 @@ int main() {
                     if (bytes <= 0) {
                         client->set_inactive();
                     } else {
+                        int result = client->send_packet(buffer, bytes);
+                        if (result < 0) {
+                            LOG_ERROR("Failed to send packet to client %s", client->username.c_str());
+                            client->set_inactive();
+                        }
                         buffer[bytes] = 0;
                         chat_server.handleMessage(client, buffer, bytes);
                     }

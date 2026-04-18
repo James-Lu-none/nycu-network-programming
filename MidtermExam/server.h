@@ -39,7 +39,7 @@ public:
             if ((*it) == sender || !(*it)->is_active) continue;
             int result = (*it)->send_packet(full_message.c_str(), (int)full_message.length());
             if (result < 0) {
-                LOG_INFO("Failed to send packet to client %s", (*it)->username.c_str());
+                LOG_ERROR("Failed to send packet to client %s", (*it)->username.c_str());
                 (*it)->set_inactive();
             }
         }
