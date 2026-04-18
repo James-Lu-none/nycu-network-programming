@@ -159,6 +159,7 @@ public:
                     CLOSESOCKET((*it)->sock);
                 }
                 broadcastSystemMessage((*it)->username + " left the chat");
+                LOG_INFO("client %s was lazy removed from all_clients", (*it)->username.c_str());
                 it = all_clients.erase(it);
             } else {
                 ++it;
