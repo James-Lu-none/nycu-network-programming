@@ -147,9 +147,9 @@ int main(int argc, char* argv[]) {
             if (strncmp(buffer, "[PONG]", 6) == 0) {
                 ping_fail_count = 0;
             } else if (strncmp(buffer, "[SENT]", 6) == 0) {
-                // move cursor up 1 line, go to start, and overwrite with (message sent) appended
                 if (!last_sent_msg.empty()) {
-                    printf("\033[1A\r" BOLD GREEN "> " RESET "%s " GRAY "(message sent)" RESET "\n" BOLD GREEN "> " RESET, last_sent_msg.c_str());
+                    // move cursor up 1 line, go to start, and overwrite with (message sent) appended
+                    printf("\033[s\033[1A\r" BOLD GREEN "> " RESET "%s " GRAY "(message sent)      " RESET "\033[u", last_sent_msg.c_str());
                     fflush(stdout);
                 }
             } else {
@@ -196,7 +196,11 @@ int main(int argc, char* argv[]) {
             if (use_tcp) send(s, msg.c_str(), (int)msg.length(), 0);
             else sendto(s, msg.c_str(), (int)msg.length(), 0, (struct sockaddr*)&server_addr, addr_len);
             
-            printf(BOLD GREEN "> " RESET);
+            if (msg[0] != '/'){
+                printf("\033[1A\r" BOLD GREEN "> " RESET "%s " GRAY "(sending message...)" RESET "\n" BOLD GREEN "> " RESET, msg.c_str());
+            } else {
+                printf(BOLD GREEN "> " RESET);
+            }
             fflush(stdout);
         }
     }

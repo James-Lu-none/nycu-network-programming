@@ -41,7 +41,7 @@
    - `/ping`: Manual heartbeat update.
 5. message delivery confirmation:
     - when a client sends a message, the server will respond with `[SENT]` to indicate that the message has been received
-    - on client side, when it receives `[SENT]`, it will add a `(message sent)` postfix to the message
+    - on client side, before receiving `[SENT]`, it will add a `(message sending...)` postfix to the message, and after receiving `[SENT]`, it will replace `(message sending...)` with `(message sent)`
 
 ## observations
 
