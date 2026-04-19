@@ -5,6 +5,8 @@
 #include <time.h>
 #include <stdio.h>
 
+// use ##__VA_ARGS__ to allow for empty __VA_ARGS__ without causing a trailing comma issue
+// #define LOG_INFO(fmt, ...) means that the macro can be called with just a format string, or with additional arguments for formatting
 #define LOG_INFO(fmt, ...) \
     do { \
         time_t now = time(NULL); \
