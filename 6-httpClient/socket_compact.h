@@ -21,13 +21,16 @@
 #endif
 
 // define some common macros for cross-platform compatibility
-#if defined(_WIN32) || defined(_WIN64)
-    #define CLOSESOCKET closesocket
-    #define SOCKET_ERROR_CODE WSAGetLastError()
-    #define ISVALIDSOCKET(s) ((s) != INVALID_SOCKET)
+#if defined(_WIN32)
+#define ISVALIDSOCKET(s) ((s) != INVALID_SOCKET)
+#define CLOSESOCKET(s) closesocket(s)
+#define GETSOCKETERRNO() (WSAGetLastError())
+
 #else
-    #define CLOSESOCKET close
-    #define SOCKET_ERROR_CODE errno
-    #define ISVALIDSOCKET(s) ((s) >= 0)
-    #define SOCKET int
+#define ISVALIDSOCKET(s) ((s) >= 0)
+#define CLOSESOCKET(s) close(s)
+#define SOCKET int
+#define GETSOCKETERRNO() (errno)
+
+
 #endif
