@@ -6,7 +6,11 @@
 #include <openssl/pem.h>
 #include <openssl/x509.h>
 #include <stdio.h>
+#include <string>
+#include <cstring>
+#include <strings.h>
 #include "logging.h"
+#include "colors.h"
 
 inline bool generate_self_signed_cert(const char* key_path, const char* cert_path) {
     // generate a RSA private key
@@ -135,6 +139,120 @@ inline SSL_CTX* init_client_ssl_ctx() {
         return nullptr;
     }
     return ssl_ctx;
+}
+
+inline bool hostname_matches(const char* cn, const char* host) {
+    if (strcasecmp(cn, host) == 0) return true;
+    if ((strcasecmp(cn, "localhost") == 0 && strcmp(host, "127.0.0.1") == 0) ||
+        (strcmp(cn, "127.0.0.1") == 0 && strcasecmp(host, "localhost") == 0)) {
+        return true;
+    }
+    return false;
+}
+
+inline std::string get_asn1_time_string(const ASN1_TIME* tm) {
+    if (!tm) return "N/A";
+    BIO* bio = BIO_new(BIO_s_mem());
+    if (!bio) return "N/A";
+    ASN1_TIME_print(bio, tm);
+    char buf[128];
+    int len = BIO_read(bio, buf, sizeof(buf) - 1);
+    if (len < 0) len = 0;
+    buf[len] = '\0';
+    BIO_free(bio);
+    return std::string(buf);
+}
+
+inline std::string get_asn1_integer_string(const ASN1_INTEGER* serial) {
+    if (!serial) return "N/A";
+    BIO* bio = BIO_new(BIO_s_mem());
+    if (!bio) return "N/A";
+    i2a_ASN1_INTEGER(bio, serial);
+    char buf[256];
+    int len = BIO_read(bio, buf, sizeof(buf) - 1);
+    if (len < 0) len = 0;
+    buf[len] = '\0';
+    BIO_free(bio);
+    return std::string(buf);
+}
+
+inline int verify_ssl_cert (SSL* ssl) {
+    X509* cert = SSL_get_peer_certificate(ssl);
+    if (!cert) {
+        LOG_ERROR("No server certificate presented.");
+        return -1;
+    }
+
+    // check if expired or not yet valid
+    const ASN1_TIME* not_before = X509_get0_notBefore(cert);
+    const ASN1_TIME* not_after = X509_get0_notAfter(cert);
+    if (X509_cmp_time(not_before, nullptr) > 0) {
+        LOG_ERROR("Certificate is not yet valid.");
+        X509_free(cert);
+        return -1;
+    }
+    if (X509_cmp_time(not_after, nullptr) < 0) {
+        LOG_ERROR("Certificate has expired.");
+        X509_free(cert);
+        return -1;
+    }
+
+    // check if the certificate's common name doesn't match the hostname
+    X509_NAME* subject_name = X509_get_subject_name(cert);
+    char cn[256] = {0};
+    int cn_len = X509_NAME_get_text_by_NID(subject_name, NID_commonName, cn, sizeof(cn));
+    if (cn_len < 0 || !hostname_matches(cn, host)) {
+        LOG_ERROR("Certificate common name (%s) does not match hostname (%s).", cn_len >= 0 ? cn : "UNKNOWN", host);
+        X509_free(cert);
+        return -1;
+    }
+
+    // warn user if the certificate is self-signed (not issued by a trusted CA)
+    X509_NAME* issuer_name = X509_get_issuer_name(cert);
+    bool is_self_signed = (subject_name && issuer_name && X509_NAME_cmp(subject_name, issuer_name) == 0);
+    if (is_self_signed) {
+        printf(BOLD YELLOW "WARNING: The server certificate is self-signed (not issued by a trusted CA).\n" RESET);
+    }
+
+    X509_free(cert);
+    return 0;
+}
+
+inline void print_ssl_cert_info(SSL* ssl) {
+    if (!ssl) {
+        printf("SSL connection not active.\n");
+        return;
+    }
+    X509* cert = SSL_get_peer_certificate(ssl);
+    if (!cert) {
+        printf("No server certificate presented.\n");
+        return;
+    }
+
+    char subject_buf[256] = {0};
+    char issuer_buf[256] = {0};
+    X509_NAME_oneline(X509_get_subject_name(cert), subject_buf, sizeof(subject_buf) - 1);
+    X509_NAME_oneline(X509_get_issuer_name(cert), issuer_buf, sizeof(issuer_buf) - 1);
+
+    const ASN1_TIME* not_before = X509_get0_notBefore(cert);
+    const ASN1_TIME* not_after = X509_get0_notAfter(cert);
+    const ASN1_INTEGER* serial = X509_get_serialNumber(cert);
+
+    X509_NAME* subj = X509_get_subject_name(cert);
+    X509_NAME* iss = X509_get_issuer_name(cert);
+    bool is_self_signed = (subj && iss && X509_NAME_cmp(subj, iss) == 0);
+
+    printf("\n" BOLD CYAN "--- TLS Server Certificate Information ---" RESET "\n");
+    printf(BOLD "Subject: " RESET "%s\n", subject_buf);
+    printf(BOLD "Issuer:  " RESET "%s\n", issuer_buf);
+    printf(BOLD "Serial:  " RESET "%s\n", get_asn1_integer_string(serial).c_str());
+    printf(BOLD "Validity:" RESET "\n");
+    printf("  " BOLD "Not Before: " RESET "%s\n", get_asn1_time_string(not_before).c_str());
+    printf("  " BOLD "Not After:  " RESET "%s\n", get_asn1_time_string(not_after).c_str());
+    printf(BOLD "Status:   " RESET "%s\n", is_self_signed ? YELLOW "Self-Signed Certificate (Untrusted)" RESET : GREEN "Trusted / Verified Certificate" RESET);
+    printf(BOLD CYAN "------------------------------------------" RESET "\n\n");
+
+    X509_free(cert);
 }
 
 #endif // SSL_HELPER_H

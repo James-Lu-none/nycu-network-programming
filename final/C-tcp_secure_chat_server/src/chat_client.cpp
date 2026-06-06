@@ -5,6 +5,7 @@
 #include <iostream>
 #include <string>
 #include <cstring>
+#include <strings.h>
 
 using namespace std;
 
@@ -146,7 +147,13 @@ int main(int argc, char* argv[]) {
         SSL_set_fd(ssl, s);
         if (SSL_connect(ssl) <= 0) {
             LOG_ERROR("SSL/TLS handshake failed");
-            ERR_print_errors_fp(stderr);
+            SSL_free(ssl);
+            SSL_CTX_free(ssl_ctx);
+            CLOSESOCKET(s);
+            return 1;
+        }
+
+        if (verify_ssl_cert(ssl, ssl_ctx, s, host) != 0) {
             SSL_free(ssl);
             SSL_CTX_free(ssl_ctx);
             CLOSESOCKET(s);
@@ -258,6 +265,16 @@ int main(int argc, char* argv[]) {
             msg.erase(msg.find_last_not_of("\n\r") + 1);
 
             if (msg.empty()) {
+                printf(BOLD GREEN "> " RESET); fflush(stdout);
+                continue;
+            }
+
+            if (msg == "/tls") {
+                if (use_tcp && ssl) {
+                    print_ssl_cert_info(ssl);
+                } else {
+                    printf(RED "TLS is not active on this connection.\n" RESET);
+                }
                 printf(BOLD GREEN "> " RESET); fflush(stdout);
                 continue;
             }

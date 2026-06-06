@@ -81,6 +81,7 @@ public:
             "/list <or /l>: list all active users\n"
             "/dm <name> <message> <or /d>: send direct message to a user\n"
             "/ping <or /p>: update last seen time\n"
+            "/tls: verify the server certificate\n"
             "/quit <or /q>: quit the server" RESET;
         } else if (command == "list" || command == "l") {
             response = string(BOLD CYAN) + "Active users: " + RESET + WHITE;
@@ -125,6 +126,8 @@ public:
         } else if (command == "ping" || command == "p") {
             response = "[PONG]";
             client->last_seen = time(nullptr);
+        } else if (command == "tls") {
+            response = string(CYAN) + "Verifying TLS certificate on client side." + RESET;
         } else {
             response = string(RED) + "Unknown command. Type /help for a list of commands." + RESET;
         }
