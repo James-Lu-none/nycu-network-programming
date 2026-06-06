@@ -10,18 +10,17 @@
 
 using namespace std;
 
-#define API_URL "http://nycu.waynewolf.tw/weather/weather.do"
+#define API_HOST "nycu.waynewolf.tw"
+#define API_PORT "80"
+#define API_PATH "/weather/weather.do"
 
 inline string get_weather(string location) {
-    // convert location to lowercase
-    transform(location.begin(), location.end(), location.begin(), ::tolower);
-
     struct addrinfo hints, *res;
     memset(&hints, 0, sizeof(hints));
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_STREAM;
     
-    if (getaddrinfo("nycu.waynewolf.tw", "80", &hints, &res) != 0) {
+    if (getaddrinfo(API_HOST, API_PORT, &hints, &res) != 0) {
         return "Error: Could not resolve weather server address";
     }
 
@@ -40,8 +39,8 @@ inline string get_weather(string location) {
 
     string body = "time=now&location=" + location;
     string request = 
-        "POST /weather/weather.do HTTP/1.1\r\n"
-        "Host: nycu.waynewolf.tw\r\n"
+        "POST " + string(API_PATH) + " HTTP/1.1\r\n"
+        "Host: " + string(API_HOST) + "\r\n"
         "Content-Type: application/x-www-form-urlencoded\r\n"
         "Content-Length: " + to_string(body.length()) + "\r\n"
         "Connection: close\r\n\r\n" + body;
