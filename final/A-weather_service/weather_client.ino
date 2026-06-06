@@ -15,6 +15,9 @@ const char* serverHost = "nycu.waynewolf.tw";
 const int serverPort = 80;
 const char* serverPath = "/weather/weather.do";
 
+IPAddress serverIP;
+bool ipResolved = false;
+
 struct WeatherData {
   const char* queryName;
   const char* displayName;
@@ -34,7 +37,7 @@ WeatherData data[4] = {
 int fetchLocationIndex = 0;
 
 unsigned long lastRequestTime = 0;
-const unsigned long requestInterval = 10000;
+const unsigned long requestInterval = 3000;
 
 WiFiClient client;
 enum HttpState {
@@ -43,7 +46,7 @@ enum HttpState {
 };
 HttpState httpState = HTTP_IDLE;
 unsigned long requestSendTime = 0;
-const unsigned long responseTimeout = 5000;
+const unsigned long responseTimeout = 3000;
 
 enum SlideState {
   SLIDE_TAIPEI = 0,
@@ -58,8 +61,6 @@ int scrollX = 12;
 int scrollEndX = 0;
 String scrollTextStr = "";
 
-unsigned long loopCount = 0;
-
 void updateScrollFrame() {
   matrix.beginDraw();
   matrix.clear();
@@ -68,10 +69,13 @@ void updateScrollFrame() {
   matrix.print(scrollTextStr);
   matrix.endText();
   
-  // Calculate dotX dynamically: moves right by 1 pixel every loop iteration
-  int dotX = loopCount % 12;
+  // data indicator dots
   matrix.stroke(0xFFFFFF);
-  matrix.point(dotX, 7);
+  for (int i = 0; i < 4; i++) {
+    if (data[i].hasData) {
+      matrix.point(8 + i, 7);
+    }
+  }
   
   matrix.endDraw();
 }
@@ -107,21 +111,31 @@ void handleDisplay() {
 
 void sendRequest() {
   if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("WiFi disconnected! Initiating background reconnection...");
-    WiFi.disconnect();
-    WiFi.begin(wifi_ssid, wifi_pass);
+    static unsigned long lastReconnectAttempt = 0;
+    unsigned long now = millis();
+    if (now - lastReconnectAttempt >= 15000 || lastReconnectAttempt == 0) {
+      WiFi.disconnect();
+      WiFi.begin(wifi_ssid, wifi_pass);
+      lastReconnectAttempt = now;
+    }
+    return;
   }
   
   if (httpState != HTTP_IDLE) {
     return;
   }
 
-  Serial.print("Connecting to server for location: ");
-  Serial.println(data[fetchLocationIndex].queryName);
+  // Resolve IP once to avoid blocking DNS lookups
+  if (!ipResolved) {
+    if (WiFi.hostByName(serverHost, serverIP) == 1) {
+      ipResolved = true;
+    } else {
+      return;
+    }
+  }
   
-  if (client.connect(serverHost, serverPort)) {
-    Serial.println("Connected! Sending POST request...");
-    
+  bool isConnected = client.connected();
+  if (isConnected || client.connect(serverIP, serverPort)) {
     String postData = "time=now&location=" + String(data[fetchLocationIndex].queryName);
     
     client.println("POST " + String(serverPath) + " HTTP/1.1");
@@ -129,7 +143,7 @@ void sendRequest() {
     client.println("Content-Type: application/x-www-form-urlencoded");
     client.print("Content-Length: ");
     client.println(postData.length());
-    client.println("Connection: close");
+    client.println("Connection: keep-alive");
     client.println();
     client.print(postData);
     client.println();
@@ -137,7 +151,7 @@ void sendRequest() {
     httpState = HTTP_AWAITING_RESPONSE;
     requestSendTime = millis();
   } else {
-    Serial.println("Connection to server failed.");
+    data[fetchLocationIndex].hasData = false;
   }
 }
 
@@ -160,12 +174,11 @@ void handleResponse() {
         }
       }
     }
-    client.stop();
     httpState = HTTP_IDLE;
     
     body.trim();
-    Serial.print("Server Response Body: ");
-    Serial.println(body);
+    // Serial.print("Server Response Body: ");
+    // Serial.println(body);
     
     int comma1 = body.indexOf(',');
     int comma2 = body.indexOf(',', comma1 + 1);
@@ -180,18 +193,18 @@ void handleResponse() {
       data[idx].humid.trim();
       data[idx].hasData = true;
       
-      Serial.print("Successfully updated weather data for ");
-      Serial.println(data[idx].queryName);
+      // Serial.print("updated weather data for ");
+      // Serial.println(data[idx].queryName);
       
-      // Move to the next location for the next request interval
+      // move to the next location for the next request interval
       fetchLocationIndex = (fetchLocationIndex + 1) % 4;
     } else {
-      Serial.println("Parsing error: response format invalid.");
+      data[fetchLocationIndex].hasData = false;
     }
   } else if (millis() - requestSendTime > responseTimeout) {
-    Serial.println("HTTP Client Timeout!");
     client.stop();
     httpState = HTTP_IDLE;
+    data[fetchLocationIndex].hasData = false;
   }
 }
 
@@ -204,18 +217,17 @@ void setup() {
   wifi_status = WiFi.begin(wifi_ssid, wifi_pass);
   while (wifi_status != WL_CONNECTED) {
     delay(2000);
-    Serial.print(".");
+    // Serial.print(".");
     wifi_status = WiFi.status();
   }
 
-  Serial.println("\nConnected to WiFi!");
+  // Serial.println("\nConnected to WiFi!");
+  client.setTimeout(50);
   setupSlide();
   lastDisplayStateTime = millis();
 }
 
 void loop() {
-  loopCount++;
-
   unsigned long currentMillis = millis();
   handleDisplay();
   
