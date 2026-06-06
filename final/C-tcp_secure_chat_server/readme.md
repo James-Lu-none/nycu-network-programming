@@ -58,8 +58,8 @@
 ## additional features (final)
 
 1. if `server.crt` or `server.key` doesn't exist, server will generate key and a self-signed certificate automatically
-2. connection will fail if server's certificate is expired or the certificate's common name doesn't match the hostname
-3. warn user if the certificate is self-signed (not issued by a trusted CA)
+2. connection will fail if server's certificate is expired
+3. warn user if the certificate is self-signed (not issued by a trusted CA) or the certificate's common name doesn't match the hostname
 4. add `/tls` command to obtain the server certificate information
 5. add `/weather <location>` command to obtain weather information using the api provided in the assignment A
 
