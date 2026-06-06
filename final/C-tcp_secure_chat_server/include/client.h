@@ -44,14 +44,28 @@ public:
     virtual string get_protocol_prefix() const = 0;
 };
 
+#include <openssl/ssl.h>
+
 class TCPClient : public BaseClient {
 public:
-    TCPClient(SOCKET s): BaseClient(TCP, s) {
+    SSL *ssl;
+
+    TCPClient(SOCKET s, SSL *ssl_ptr = nullptr): BaseClient(TCP, s), ssl(ssl_ptr) {
         LOG_INFO("TCP client connected, fd id: %d, username: %s", (int)s, username.c_str());
+    }
+
+    ~TCPClient() override {
+        if (ssl) {
+            SSL_shutdown(ssl);
+            SSL_free(ssl);
+        }
     }
 
     int send_packet(const char* data, int len) override {
         LOG_DEBUG("Sending packet to TCP client %s, fd id: %d", username.c_str(), (int)sock);
+        if (ssl) {
+            return SSL_write(ssl, data, len);
+        }
         return send(sock, data, len, 0);
     }
 
@@ -63,6 +77,11 @@ public:
     void set_inactive() override {
         LOG_INFO("TCP client %s, fd id: %d is inactive", username.c_str(), (int)sock);
         is_active = false;
+        if (ssl) {
+            SSL_shutdown(ssl);
+            SSL_free(ssl);
+            ssl = nullptr;
+        }
     }
 
     string get_protocol_prefix() const override {

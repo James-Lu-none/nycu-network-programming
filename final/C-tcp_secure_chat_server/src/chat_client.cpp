@@ -1,6 +1,7 @@
 #include "socket_compact.h"
 #include "colors.h"
 #include "logging.h"
+#include "ssl_helper.h"
 #include <iostream>
 #include <string>
 #include <cstring>
@@ -111,8 +112,9 @@ int main(int argc, char* argv[]) {
             if (try_tcp_connection(host, port, &s) != 0) {
                 LOG_INFO("Falling back to UDP...");
                 if (try_udp_connection(host, port, &s, &server_addr, &addr_len) != 0) return 1;
+            } else {
+                use_tcp = true;
             }
-            use_tcp = true;
             break;
         case 'u':
             if (try_udp_connection(host, port, &s, &server_addr, &addr_len) != 0) return 1;
@@ -123,10 +125,44 @@ int main(int argc, char* argv[]) {
             return 1;
     }
 
+    // Initialize SSL if using TCP
+    SSL* ssl = nullptr;
+    SSL_CTX* ssl_ctx = nullptr;
+    if (use_tcp) {
+        ssl_ctx = init_client_ssl_ctx();
+        if (!ssl_ctx) {
+            CLOSESOCKET(s);
+            return 1;
+        }
+
+        ssl = SSL_new(ssl_ctx);
+        if (!ssl) {
+            LOG_ERROR("SSL object creation failed");
+            SSL_CTX_free(ssl_ctx);
+            CLOSESOCKET(s);
+            return 1;
+        }
+
+        SSL_set_fd(ssl, s);
+        if (SSL_connect(ssl) <= 0) {
+            LOG_ERROR("SSL/TLS handshake failed");
+            ERR_print_errors_fp(stderr);
+            SSL_free(ssl);
+            SSL_CTX_free(ssl_ctx);
+            CLOSESOCKET(s);
+            return 1;
+        }
+        LOG_INFO("SSL/TLS connection established successfully.");
+    }
+
     // set username with command /nick
     string msg = "/nick " + string(username);
     if (use_tcp) {
-        send(s, msg.c_str(), msg.length(), 0);
+        if (ssl) {
+            SSL_write(ssl, msg.c_str(), msg.length());
+        } else {
+            send(s, msg.c_str(), msg.length(), 0);
+        }
     } else {
         sendto(s, msg.c_str(), msg.length(), 0, (struct sockaddr*)&server_addr, addr_len);
     }
@@ -158,23 +194,31 @@ int main(int argc, char* argv[]) {
         int select_res = select(max_fd + 1, &read_fds, NULL, NULL, &tv);
 
         if (select_res > 0 && FD_ISSET(s, &read_fds)) {
-            int bytes = (use_tcp) ? recv(s, buffer, BUFFER_SIZE - 1, 0) 
-                                : recvfrom(s, buffer, BUFFER_SIZE - 1, 0, NULL, NULL);
+            int bytes = 0;
+            if (use_tcp) {
+                if (ssl) {
+                    bytes = SSL_read(ssl, buffer, BUFFER_SIZE - 1);
+                } else {
+                    bytes = recv(s, buffer, BUFFER_SIZE - 1, 0);
+                }
+            } else {
+                bytes = recvfrom(s, buffer, BUFFER_SIZE - 1, 0, NULL, NULL);
+            }
+
             if (bytes <= 0) {
                 LOG_ERROR("Disconnected from server.");
                 break;
             }
-            // if receive start with "pong" 
+            buffer[bytes] = 0;
+
             if (strncmp(buffer, "[PONG]", 6) == 0) {
                 ping_fail_count = 0;
             } else if (strncmp(buffer, "[SENT]", 6) == 0) {
                 if (!last_sent_msg.empty()) {
-                    // move cursor up 1 line, go to start, and overwrite with (message sent) appended
                     printf("\033[s\033[1A\r" BOLD GREEN "> " RESET "%s " GRAY "(message sent)      " RESET "\033[u", last_sent_msg.c_str());
                     fflush(stdout);
                 }
             } else {
-                buffer[bytes] = 0;
                 printf("\r%s\n" BOLD GREEN "> " RESET, buffer);
                 fflush(stdout);
             }
@@ -183,8 +227,15 @@ int main(int argc, char* argv[]) {
         // send /ping to server every 5 seconds
         time_t now = time(nullptr);
         if (now - last_ping >= 5) {
-            if (use_tcp) send(s, "/ping", 5, 0);
-            else sendto(s, "/ping", 5, 0, (struct sockaddr*)&server_addr, addr_len);
+            if (use_tcp) {
+                if (ssl) {
+                    SSL_write(ssl, "/ping", 5);
+                } else {
+                    send(s, "/ping", 5, 0);
+                }
+            } else {
+                sendto(s, "/ping", 5, 0, (struct sockaddr*)&server_addr, addr_len);
+            }
             last_ping = now;
             ping_fail_count++;
         }
@@ -212,10 +263,16 @@ int main(int argc, char* argv[]) {
             }
 
             last_sent_msg = msg;
-            if (use_tcp) send(s, msg.c_str(), (int)msg.length(), 0);
-            else sendto(s, msg.c_str(), (int)msg.length(), 0, (struct sockaddr*)&server_addr, addr_len);
+            if (use_tcp) {
+                if (ssl) {
+                    SSL_write(ssl, msg.c_str(), (int)msg.length());
+                } else {
+                    send(s, msg.c_str(), (int)msg.length(), 0);
+                }
+            } else {
+                sendto(s, msg.c_str(), (int)msg.length(), 0, (struct sockaddr*)&server_addr, addr_len);
+            }
             
-            // quit after sending /quit or /q
             if (msg == "/quit" || msg == "/q") break;
 
             if (msg[0] != '/'){
@@ -225,6 +282,14 @@ int main(int argc, char* argv[]) {
             }
             fflush(stdout);
         }
+    }
+
+    if (ssl) {
+        SSL_shutdown(ssl);
+        SSL_free(ssl);
+    }
+    if (ssl_ctx) {
+        SSL_CTX_free(ssl_ctx);
     }
 
     CLOSESOCKET(s);

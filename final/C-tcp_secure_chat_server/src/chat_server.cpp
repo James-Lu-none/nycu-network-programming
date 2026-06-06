@@ -11,6 +11,7 @@
 #include "client.h"
 #include "colors.h"
 #include "server.h"
+#include "ssl_helper.h"
 
 using namespace std;
 
@@ -26,6 +27,22 @@ int main() {
     }
 #endif
 
+    const char* key_path = "server.key";
+    const char* cert_path = "server.crt";
+
+    // Ensure self-signed certificate and key exist
+    if (!ensure_certificates(key_path, cert_path)) {
+        LOG_ERROR("Failed to generate or locate self-signed certificate");
+        return 1;
+    }
+
+    // Initialize SSL context
+    SSL_CTX* ssl_ctx = init_server_ssl_ctx(cert_path, key_path);
+    if (!ssl_ctx) {
+        LOG_ERROR("Failed to initialize server SSL context");
+        return 1;
+    }
+
     const char* port = "8080";
     struct addrinfo hints, *res;
     memset(&hints, 0, sizeof(hints));
@@ -35,6 +52,7 @@ int main() {
 
     if (getaddrinfo(NULL, port, &hints, &res) != 0) {
         LOG_ERROR("getaddrinfo failed for TCP");
+        SSL_CTX_free(ssl_ctx);
         return 1;
     }
 
@@ -42,6 +60,8 @@ int main() {
     SOCKET tcp_listen = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
     if (!ISVALIDSOCKET(tcp_listen)) {
         LOG_ERROR("TCP socket creation failed");
+        freeaddrinfo(res);
+        SSL_CTX_free(ssl_ctx);
         return 1;
     }
     
@@ -50,10 +70,16 @@ int main() {
 
     if (bind(tcp_listen, res->ai_addr, res->ai_addrlen) < 0) {
         LOG_ERROR("TCP bind failed");
+        freeaddrinfo(res);
+        CLOSESOCKET(tcp_listen);
+        SSL_CTX_free(ssl_ctx);
         return 1;
     }
     if (listen(tcp_listen, 10) < 0) {
         LOG_ERROR("TCP listen failed");
+        freeaddrinfo(res);
+        CLOSESOCKET(tcp_listen);
+        SSL_CTX_free(ssl_ctx);
         return 1;
     }
 
@@ -62,22 +88,34 @@ int main() {
     struct addrinfo *res_udp;
     if (getaddrinfo(NULL, port, &hints, &res_udp) != 0) {
         LOG_ERROR("getaddrinfo failed for UDP");
+        freeaddrinfo(res);
+        CLOSESOCKET(tcp_listen);
+        SSL_CTX_free(ssl_ctx);
         return 1;
     }
     SOCKET udp_socket = socket(res_udp->ai_family, res_udp->ai_socktype, res_udp->ai_protocol);
     if (!ISVALIDSOCKET(udp_socket)) {
         LOG_ERROR("UDP socket creation failed");
+        freeaddrinfo(res);
+        freeaddrinfo(res_udp);
+        CLOSESOCKET(tcp_listen);
+        SSL_CTX_free(ssl_ctx);
         return 1;
     }
     if (bind(udp_socket, res_udp->ai_addr, res_udp->ai_addrlen) < 0) {
         LOG_ERROR("UDP bind failed");
+        freeaddrinfo(res);
+        freeaddrinfo(res_udp);
+        CLOSESOCKET(tcp_listen);
+        CLOSESOCKET(udp_socket);
+        SSL_CTX_free(ssl_ctx);
         return 1;
     }
 
     freeaddrinfo(res);
     freeaddrinfo(res_udp);
 
-    LOG_INFO("Server listening on port %s (TCP & UDP)", port);
+    LOG_INFO("Server listening on port %s (TCP with SSL/TLS & UDP)", port);
 
     ChatServer chat_server;
     char buffer[BUFFER_SIZE];
@@ -112,9 +150,18 @@ int main() {
             socklen_t addr_len = sizeof(client_addr);
             SOCKET new_sock = accept(tcp_listen, (struct sockaddr*)&client_addr, &addr_len);
             if (ISVALIDSOCKET(new_sock)) {
-                auto new_client = make_shared<TCPClient>(new_sock);
-                chat_server.all_clients.push_back(new_client);
-                chat_server.broadcastSystemMessage(new_client->username + " joined the chat via TCP", new_client);
+                SSL* ssl = SSL_new(ssl_ctx);
+                SSL_set_fd(ssl, new_sock);
+                if (SSL_accept(ssl) <= 0) {
+                    LOG_ERROR("SSL handshake failed for new connection");
+                    ERR_print_errors_fp(stderr);
+                    SSL_free(ssl);
+                    CLOSESOCKET(new_sock);
+                } else {
+                    auto new_client = make_shared<TCPClient>(new_sock, ssl);
+                    chat_server.all_clients.push_back(new_client);
+                    chat_server.broadcastSystemMessage(new_client->username + " joined the chat via TCP (SSL/TLS)", new_client);
+                }
             }
         }
 
@@ -122,7 +169,14 @@ int main() {
         for (auto& client : chat_server.all_clients) {
             if (client->type == TCP && client->is_active) {
                 if (FD_ISSET(client->sock, &working_fds)) {
-                    int bytes = recv(client->sock, buffer, BUFFER_SIZE - 1, 0);
+                    auto tc = static_pointer_cast<TCPClient>(client);
+                    int bytes = 0;
+                    if (tc->ssl) {
+                        bytes = SSL_read(tc->ssl, buffer, BUFFER_SIZE - 1);
+                    } else {
+                        bytes = recv(client->sock, buffer, BUFFER_SIZE - 1, 0);
+                    }
+                    
                     if (bytes <= 0) {
                         client->set_inactive();
                     } else {
@@ -167,6 +221,7 @@ int main() {
 
     CLOSESOCKET(tcp_listen);
     CLOSESOCKET(udp_socket);
+    SSL_CTX_free(ssl_ctx);
 #if defined(_WIN32) || defined(_WIN64)
     WSACleanup();
 #endif
