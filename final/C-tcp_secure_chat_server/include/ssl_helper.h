@@ -143,10 +143,6 @@ inline SSL_CTX* init_client_ssl_ctx() {
 
 inline bool hostname_matches(const char* cn, const char* host) {
     if (strcasecmp(cn, host) == 0) return true;
-    if ((strcasecmp(cn, "localhost") == 0 && strcmp(host, "127.0.0.1") == 0) ||
-        (strcmp(cn, "127.0.0.1") == 0 && strcasecmp(host, "localhost") == 0)) {
-        return true;
-    }
     return false;
 }
 

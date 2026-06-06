@@ -7,6 +7,10 @@
 #include <cstring>
 #include <strings.h>
 
+#if !defined(_WIN32) && !defined(_WIN64)
+#include <signal.h>
+#endif
+
 using namespace std;
 
 #define BUFFER_SIZE 4096
@@ -83,6 +87,9 @@ int try_udp_connection(const char* host, const char* port, SOCKET* s_out, struct
 }
 
 int main(int argc, char* argv[]) {
+#if !defined(_WIN32) && !defined(_WIN64)
+    signal(SIGPIPE, SIG_IGN);
+#endif
     if (argc < 3) {
         LOG_ERROR("Usage: %s <host> <username> [port] [protocol]", argv[0]);
         return 1;

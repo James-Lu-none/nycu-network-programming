@@ -30,7 +30,8 @@
 
 1. midterm design decisions are kept since required argument are not changed.
 2. use an additional ssl_helper.h file declare inline helper function for SSL/TLS and keep the chat_server.cpp and chat_client.cpp clean as possible.
-3. SSL/TLS was used by default for tcp connections.
+3. SSL/TLS is used by default for tcp connections.
+4. ignore sigpipe signal to avoid server get killed when certificate verification fails on client side
 
 ## additional features (midterm)
 
@@ -55,14 +56,19 @@
 
 ## additional features (final)
 
-1. if server.crt or server.key doesn't exist, server will generate key and a self-signed certificate automatically
+1. if `server.crt` or `server.key` doesn't exist, server will generate key and a self-signed certificate automatically
 2. connection will fail if server's certificate is expired or the certificate's common name doesn't match the hostname
 3. warn user if the certificate is self-signed (not issued by a trusted CA)
-4. add /tls command to obtain the server certificate information
+4. add `/tls` command to obtain the server certificate information
+5. integrated weather collector server into chat server and allow client to obtain weather information using `/weather` command
 
-## observations
+## observations (midterm)
 
 - when server reboots, all tcp client will be disconnected, but for udp clients, they will be reconnected and add to all_clients again due to the `/ping` command if its not exited yet, and it will get a new Guest-xxxxx username, although we can send `/nick` command to change the username to the one we provided when connected to the server, but i think its fine to leave it as it is to show what will happen when username isn't provided
+
+## observations (final)
+
+- when certificate verification fails (ex: certificate common name doesn't match hostname), the server will might get killed because it will try to send SSL close_notify alert message to client, but the client's ssl connection has been closed already at the moment when verification fails, hence sending alert message will cause SIGPIPE signal (sending message to a closed socket), so i ignore SIGPIPE signal on server side to avoid this kind of crash
 
 ## tmux test script
 

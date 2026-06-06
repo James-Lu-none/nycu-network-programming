@@ -7,6 +7,10 @@
 #include <cstring>
 #include <string>
 
+#if !defined(_WIN32) && !defined(_WIN64)
+#include <signal.h>
+#endif
+
 #include "socket_compact.h"
 #include "client.h"
 #include "colors.h"
@@ -19,6 +23,9 @@ using namespace std;
 #define BUFFER_SIZE 4096
 
 int main() {
+#if !defined(_WIN32) && !defined(_WIN64)
+    signal(SIGPIPE, SIG_IGN);
+#endif
 #if defined(_WIN32) || defined(_WIN64)
     WSADATA wsaData;
     if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
