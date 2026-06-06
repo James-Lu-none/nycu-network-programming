@@ -8,6 +8,7 @@
 #include "client.h"
 #include "logging.h"
 #include "colors.h"
+#include "weather.h"
 
 using namespace std;
 
@@ -82,6 +83,7 @@ public:
             "/dm <name> <message> <or /d>: send direct message to a user\n"
             "/ping <or /p>: update last seen time\n"
             "/tls: verify the server certificate\n"
+            "/weather <location> <or /w>: obtain weather information\n"
             "/quit <or /q>: quit the server" RESET;
         } else if (command == "list" || command == "l") {
             response = string(BOLD CYAN) + "Active users: " + RESET + WHITE;
@@ -128,6 +130,18 @@ public:
             client->last_seen = time(nullptr);
         } else if (command == "tls") {
             response = string(CYAN) + "Verifying TLS certificate on client side." + RESET;
+        } else if (command == "weather" || command == "w") {
+            if (args.empty()) {
+                response = string(RED) + "Usage: /weather <location> (taipei, taoyuan, hsinchu, miaoli)" + RESET;
+            } else {
+                string loc = args[0];
+                for (char &c : loc) c = tolower(c);
+                if (loc != "taipei" && loc != "taoyuan" && loc != "hsinchu" && loc != "miaoli") {
+                    response = string(RED) + "Invalid location. Choose from taipei, taoyuan, hsinchu, miaoli." + RESET;
+                } else {
+                    response = get_weather(loc);
+                }
+            }
         } else {
             response = string(RED) + "Unknown command. Type /help for a list of commands." + RESET;
         }

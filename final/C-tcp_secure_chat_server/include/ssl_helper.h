@@ -12,6 +12,8 @@
 #include "logging.h"
 #include "colors.h"
 
+using namespace std;
+
 inline bool generate_self_signed_cert(const char* key_path, const char* cert_path) {
     // generate a RSA private key
     EVP_PKEY *pkey = nullptr;
@@ -146,7 +148,7 @@ inline bool hostname_matches(const char* cn, const char* host) {
     return false;
 }
 
-inline std::string get_asn1_time_string(const ASN1_TIME* tm) {
+inline string get_asn1_time_string(const ASN1_TIME* tm) {
     if (!tm) return "N/A";
     BIO* bio = BIO_new(BIO_s_mem());
     if (!bio) return "N/A";
@@ -156,10 +158,10 @@ inline std::string get_asn1_time_string(const ASN1_TIME* tm) {
     if (len < 0) len = 0;
     buf[len] = '\0';
     BIO_free(bio);
-    return std::string(buf);
+    return string(buf);
 }
 
-inline std::string get_asn1_integer_string(const ASN1_INTEGER* serial) {
+inline string get_asn1_integer_string(const ASN1_INTEGER* serial) {
     if (!serial) return "N/A";
     BIO* bio = BIO_new(BIO_s_mem());
     if (!bio) return "N/A";
@@ -169,7 +171,7 @@ inline std::string get_asn1_integer_string(const ASN1_INTEGER* serial) {
     if (len < 0) len = 0;
     buf[len] = '\0';
     BIO_free(bio);
-    return std::string(buf);
+    return string(buf);
 }
 
 inline int verify_ssl_cert (SSL* ssl, const char* host) {
