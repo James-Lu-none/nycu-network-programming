@@ -1,4 +1,3 @@
-#include <DHT11.h>
 #include <WiFiS3.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -8,182 +7,122 @@
 
 ArduinoLEDMatrix matrix;
 
-#define DHT11PIN 2
-DHT11 dht11(DHT11PIN);
-
 char wifi_ssid[] = WIFI_SSID;
 char wifi_pass[] = WIFI_PASSWORD;
 int wifi_status = WL_IDLE_STATUS;
 
-// Server connection settings
 const char* serverHost = "nycu.waynewolf.tw";
 const int serverPort = 80;
 const char* serverPath = "/weather/weather.do";
 
-// Cached server weather data
-String serverTime = "";
-String serverTemp = "";
-String serverHumid = "";
-bool hasServerData = false;
+struct WeatherData {
+  const char* queryName;
+  const char* displayName;
+  String time;
+  String temp;
+  String humid;
+  bool hasData;
+};
 
-// Cached local sensor data
-int cachedTemperature = 0;
-int cachedHumidity = 0;
-bool lastReadSuccessful = false;
+WeatherData data[4] = {
+  {"taipei", "Taipei", "", "", "", false},
+  {"taoyuan", "Taoyuan", "", "", "", false},
+  {"hsinchu", "Hsinchu", "", "", "", false},
+  {"miaoli", "Miaoli", "", "", "", false}
+};
 
-// Scheduling timers
+int fetchLocationIndex = 0;
+
 unsigned long lastRequestTime = 0;
-const unsigned long requestInterval = 30000; // Request every 30 seconds
+const unsigned long requestInterval = 10000;
 
-void print_wifi_status() {
-  Serial.print("SSID: ");
-  Serial.println(WiFi.SSID());
+WiFiClient client;
+enum HttpState {
+  HTTP_IDLE,
+  HTTP_AWAITING_RESPONSE
+};
+HttpState httpState = HTTP_IDLE;
+unsigned long requestSendTime = 0;
+const unsigned long responseTimeout = 5000;
 
-  IPAddress ip = WiFi.localIP();
-  Serial.print("IP Address: ");
-  Serial.println(ip);
-  
-  long rssi = WiFi.RSSI();
-  Serial.print("Signal strength (RSSI): ");
-  Serial.print(rssi);
-  Serial.println(" dBm");
-}
+enum SlideState {
+  SLIDE_TAIPEI = 0,
+  SLIDE_TAOYUAN = 1,
+  SLIDE_HSINCHU = 2,
+  SLIDE_MIAOLI = 3
+};
 
-void setup() {
-  Serial.begin(115200);
-  while (!Serial);
+SlideState currentSlide = SLIDE_TAIPEI;
+unsigned long lastDisplayStateTime = 0;
+int scrollX = 12;
+int scrollEndX = 0;
+String scrollTextStr = "";
 
-  // Initialize LED matrix
-  matrix.begin();
+unsigned long loopCount = 0;
 
-  // Check for the WiFi module
-  if (WiFi.status() == WL_NO_MODULE) {
-    Serial.println("Communication with WiFi module failed!");
-    while (true);
-  }
-
-  // Attempt to connect to WiFi network
-  Serial.print("Connecting to SSID: ");
-  Serial.println(wifi_ssid);
-
-  wifi_status = WiFi.begin(wifi_ssid, wifi_pass);
-  while (wifi_status != WL_CONNECTED) {
-    delay(2000);
-    Serial.print(".");
-    wifi_status = WiFi.status();
-  }
-
-  Serial.println("\nConnected to WiFi!");
-  print_wifi_status();
-}
-
-void drawClock() {
+void updateScrollFrame() {
   matrix.beginDraw();
   matrix.clear();
+  matrix.textFont(Font_4x6);
+  matrix.beginText(scrollX, 1, 0xFFFFFF);
+  matrix.print(scrollTextStr);
+  matrix.endText();
+  
+  // Calculate dotX dynamically: moves right by 1 pixel every loop iteration
+  int dotX = loopCount % 12;
   matrix.stroke(0xFFFFFF);
-  
-  // Octagon outline for clock
-  matrix.line(4, 1, 7, 1);
-  matrix.line(4, 6, 7, 6);
-  matrix.line(3, 2, 3, 5);
-  matrix.line(8, 2, 8, 5);
-  
-  // Center and hands
-  matrix.point(5, 3);
-  matrix.point(5, 2); // Hour hand pointing up
-  matrix.point(6, 3); // Minute hand pointing right
+  matrix.point(dotX, 7);
   
   matrix.endDraw();
 }
 
-void drawThermometer() {
-  matrix.beginDraw();
-  matrix.clear();
-  matrix.stroke(0xFFFFFF);
+void setupSlide() {
+  int idx = (int)currentSlide;
+  if (data[idx].hasData) {
+    scrollTextStr = String(data[idx].displayName) + ": " + data[idx].time + 
+                    " Temp:" + data[idx].temp + "C Humid:" + data[idx].humid + "%";
+  } else {
+    scrollTextStr = String(data[idx].displayName) + ": No data";
+  }
   
-  // Stem outline
-  matrix.line(5, 1, 5, 3);
-  matrix.line(7, 1, 7, 3);
-  matrix.point(6, 0); // Round top cap
-  
-  // Bulb outline at bottom
-  matrix.point(5, 4);
-  matrix.point(7, 4);
-  matrix.point(4, 5);
-  matrix.point(8, 5);
-  matrix.point(4, 6);
-  matrix.point(8, 6);
-  matrix.line(5, 7, 7, 7);
-  
-  // Mercury line inside
-  matrix.line(6, 2, 6, 6);
-  
-  matrix.endDraw();
+  int textLength = scrollTextStr.length();
+  scrollEndX = - (textLength * 5);
+  scrollX = 12;
+  updateScrollFrame();
 }
 
-void drawWaterDrop() {
-  matrix.beginDraw();
-  matrix.clear();
-  matrix.stroke(0xFFFFFF);
-  
-  // Outline of water droplet
-  matrix.point(6, 0);
-  matrix.point(5, 1);
-  matrix.point(7, 1);
-  matrix.point(4, 2);
-  matrix.point(8, 2);
-  matrix.point(3, 3);
-  matrix.point(9, 3);
-  matrix.line(2, 4, 2, 5);
-  matrix.line(10, 4, 10, 5);
-  matrix.point(3, 6);
-  matrix.point(9, 6);
-  matrix.line(4, 7, 8, 7);
-  
-  matrix.endDraw();
-}
-
-void scrollText(String text) {
-  int textLength = text.length();
-  int endX = - (textLength * 5); // 4px char width + 1px spacing
-  for (int x = 12; x >= endX; x--) {
-    matrix.beginDraw();
-    matrix.clear();
-    matrix.textFont(Font_4x6);
-    matrix.beginText(x, 1, 0xFFFFFF);
-    matrix.print(text);
-    matrix.endText();
-    matrix.endDraw();
-    delay(70); // Scroll speed control
+void handleDisplay() {
+  unsigned long now = millis();
+  if (now - lastDisplayStateTime >= 70) {
+    scrollX--;
+    if (scrollX >= scrollEndX) {
+      updateScrollFrame();
+    } else {
+      currentSlide = (SlideState)(((int)currentSlide + 1) % 4);
+      setupSlide();
+    }
+    lastDisplayStateTime = now;
   }
 }
 
-void updateWeatherData() {
-  // Reconnect WiFi if disconnected
+void sendRequest() {
   if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("WiFi disconnected! Reconnecting...");
+    Serial.println("WiFi disconnected! Initiating background reconnection...");
     WiFi.disconnect();
-    wifi_status = WiFi.begin(wifi_ssid, wifi_pass);
-    int attempts = 0;
-    while (WiFi.status() != WL_CONNECTED && attempts < 10) {
-      delay(1000);
-      Serial.print(".");
-      attempts++;
-    }
-    Serial.println();
-    if (WiFi.status() != WL_CONNECTED) {
-      Serial.println("Reconnection failed.");
-      return;
-    }
+    WiFi.begin(wifi_ssid, wifi_pass);
+  }
+  
+  if (httpState != HTTP_IDLE) {
+    return;
   }
 
-  WiFiClient client;
-  Serial.println("Connecting to server...");
+  Serial.print("Connecting to server for location: ");
+  Serial.println(data[fetchLocationIndex].queryName);
+  
   if (client.connect(serverHost, serverPort)) {
     Serial.println("Connected! Sending POST request...");
     
-    // x-www-form-urlencoded payload
-    String postData = "time=now&location=taipei";
+    String postData = "time=now&location=" + String(data[fetchLocationIndex].queryName);
     
     client.println("POST " + String(serverPath) + " HTTP/1.1");
     client.println("Host: " + String(serverHost));
@@ -195,20 +134,20 @@ void updateWeatherData() {
     client.print(postData);
     client.println();
     
-    // Wait for response
-    unsigned long timeout = millis();
-    while (client.available() == 0) {
-      if (millis() - timeout > 10000) {
-        Serial.println(">>> HTTP Client Timeout!");
-        client.stop();
-        return;
-      }
-    }
-    
-    // Read and parse
+    httpState = HTTP_AWAITING_RESPONSE;
+    requestSendTime = millis();
+  } else {
+    Serial.println("Connection to server failed.");
+  }
+}
+
+void handleResponse() {
+  if (httpState != HTTP_AWAITING_RESPONSE) return;
+
+  if (client.available() > 0) {
     bool isBody = false;
     String body = "";
-    while (client.available()) {
+    while (client.available() > 0) {
       String line = client.readStringUntil('\n');
       line.trim();
       if (!isBody) {
@@ -222,89 +161,67 @@ void updateWeatherData() {
       }
     }
     client.stop();
+    httpState = HTTP_IDLE;
     
     body.trim();
     Serial.print("Server Response Body: ");
     Serial.println(body);
     
-    // Parse: asktime,temp,humid
     int comma1 = body.indexOf(',');
     int comma2 = body.indexOf(',', comma1 + 1);
     if (comma1 != -1 && comma2 != -1) {
-      serverTime = body.substring(0, comma1);
-      serverTemp = body.substring(comma1 + 1, comma2);
-      serverHumid = body.substring(comma2 + 1);
+      int idx = fetchLocationIndex;
+      data[idx].time = body.substring(0, comma1);
+      data[idx].temp = body.substring(comma1 + 1, comma2);
+      data[idx].humid = body.substring(comma2 + 1);
       
-      serverTime.trim();
-      serverTemp.trim();
-      serverHumid.trim();
+      data[idx].time.trim();
+      data[idx].temp.trim();
+      data[idx].humid.trim();
+      data[idx].hasData = true;
       
-      hasServerData = true;
-      Serial.println("Successfully updated weather data from server.");
+      Serial.print("Successfully updated weather data for ");
+      Serial.println(data[idx].queryName);
+      
+      // Move to the next location for the next request interval
+      fetchLocationIndex = (fetchLocationIndex + 1) % 4;
     } else {
       Serial.println("Parsing error: response format invalid.");
     }
-  } else {
-    Serial.println("Connection to server failed.");
+  } else if (millis() - requestSendTime > responseTimeout) {
+    Serial.println("HTTP Client Timeout!");
+    client.stop();
+    httpState = HTTP_IDLE;
   }
 }
 
+void setup() {
+  Serial.begin(115200);
+  while(!Serial);
+  matrix.begin();
+  while(WiFi.status() == WL_NO_MODULE);
+  
+  wifi_status = WiFi.begin(wifi_ssid, wifi_pass);
+  while (wifi_status != WL_CONNECTED) {
+    delay(2000);
+    Serial.print(".");
+    wifi_status = WiFi.status();
+  }
+
+  Serial.println("\nConnected to WiFi!");
+  setupSlide();
+  lastDisplayStateTime = millis();
+}
+
 void loop() {
+  loopCount++;
+
   unsigned long currentMillis = millis();
+  handleDisplay();
   
-  // 1. Update server weather data if interval has passed or first request
-  if (lastRequestTime == 0 || currentMillis - lastRequestTime >= requestInterval) {
+  if (currentMillis - lastRequestTime >= requestInterval) {
     lastRequestTime = currentMillis;
-    updateWeatherData();
+    sendRequest();
   }
-  
-  // 2. Read local sensor
-  int temp = 0;
-  int hum = 0;
-  int result = dht11.readTemperatureHumidity(temp, hum);
-  if (result == 0) {
-    cachedTemperature = temp;
-    cachedHumidity = hum;
-    lastReadSuccessful = true;
-    Serial.print("Local Temp: "); Serial.print(cachedTemperature);
-    Serial.print(", Local Humid: "); Serial.println(cachedHumidity);
-  } else {
-    lastReadSuccessful = false;
-    Serial.println(DHT11::getErrorString(result));
-  }
-  
-  // 3. Display cycle
-  if (hasServerData) {
-    // --- Display Server Time ---
-    drawClock();
-    delay(1500);
-    scrollText("Time: " + serverTime);
-    
-    // --- Display Server Temp ---
-    drawThermometer();
-    delay(1500);
-    scrollText("Taipei: " + serverTemp + "C");
-    
-    // --- Display Server Humid ---
-    drawWaterDrop();
-    delay(1500);
-    scrollText("Taipei: " + serverHumid + "%");
-  } else {
-    scrollText("No Server Data");
-    delay(1000);
-  }
-  
-  if (lastReadSuccessful) {
-    // --- Display Local Temp ---
-    drawThermometer();
-    delay(1500);
-    scrollText("Local: " + String(cachedTemperature) + "C");
-    
-    // --- Display Local Humid ---
-    drawWaterDrop();
-    delay(1500);
-    scrollText("Local: " + String(cachedHumidity) + "%");
-  } else {
-    delay(1500);
-  }
+  handleResponse();
 }
