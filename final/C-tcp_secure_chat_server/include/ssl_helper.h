@@ -200,16 +200,14 @@ inline int verify_ssl_cert (SSL* ssl, const char* host) {
     char cn[256] = {0};
     int cn_len = X509_NAME_get_text_by_NID(subject_name, NID_commonName, cn, sizeof(cn));
     if (cn_len < 0 || !hostname_matches(cn, host)) {
-        LOG_ERROR("Certificate common name (%s) does not match hostname (%s).", cn_len >= 0 ? cn : "UNKNOWN", host);
-        X509_free(cert);
-        return -1;
+        LOG_INFO("Certificate common name (%s) does not match hostname (%s).", cn_len >= 0 ? cn : "UNKNOWN", host);
     }
 
     // warn user if the certificate is self-signed (not issued by a trusted CA)
     X509_NAME* issuer_name = X509_get_issuer_name(cert);
     bool is_self_signed = (subject_name && issuer_name && X509_NAME_cmp(subject_name, issuer_name) == 0);
     if (is_self_signed) {
-        printf(BOLD YELLOW "WARNING: The server certificate is self-signed (not issued by a trusted CA).\n" RESET);
+        LOG_INFO("WARNING: The server certificate is self-signed (not issued by a trusted CA).\n");
     }
 
     X509_free(cert);
@@ -236,9 +234,21 @@ inline void print_ssl_cert_info(SSL* ssl) {
     const ASN1_TIME* not_after = X509_get0_notAfter(cert);
     const ASN1_INTEGER* serial = X509_get_serialNumber(cert);
 
+    // check if cert is self signed or not
+    bool is_self_signed = false;
     X509_NAME* subj = X509_get_subject_name(cert);
     X509_NAME* iss = X509_get_issuer_name(cert);
-    bool is_self_signed = (subj && iss && X509_NAME_cmp(subj, iss) == 0);
+    
+    if (subj && iss && X509_NAME_cmp(subj, iss) == 0) {
+        EVP_PKEY* pubkey = X509_get0_pubkey(cert);
+        if (pubkey && X509_verify(cert, pubkey) == 1) {
+            is_self_signed = true;
+        }
+    }
+
+    // check if cert is trusted or not with OpenSSL verify function
+    long verify_result = SSL_get_verify_result(ssl);
+    bool is_trusted = (verify_result == X509_V_OK);
 
     printf("\n");
     printf(BOLD CYAN "--- TLS Server Certificate Information ---" RESET "\n");
@@ -248,7 +258,14 @@ inline void print_ssl_cert_info(SSL* ssl) {
     printf(BOLD "Validity:" RESET "\n");
     printf("  " BOLD "Not Before: " RESET "%s\n", get_asn1_time_string(not_before).c_str());
     printf("  " BOLD "Not After:  " RESET "%s\n", get_asn1_time_string(not_after).c_str());
-    printf(BOLD "Status:   " RESET "%s\n", is_self_signed ? YELLOW "Self-Signed Certificate (Untrusted)" RESET : GREEN "Trusted / Verified Certificate" RESET);
+    printf(BOLD "Type:     " RESET "%s\n", is_self_signed ? YELLOW "Self-Signed Certificate" RESET : "Standard Certificate");
+    
+    if (is_trusted) {
+        printf(BOLD "Status:   " RESET GREEN "Trusted" RESET "\n");
+    } else {
+        printf(BOLD "Status:   " RESET RED "Untrusted (Error: %s)" RESET "\n", X509_verify_cert_error_string(verify_result));
+    }
+    
     printf(BOLD CYAN "------------------------------------------" RESET);
     printf("\n\n");
 
