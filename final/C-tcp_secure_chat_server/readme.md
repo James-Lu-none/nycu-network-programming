@@ -1,6 +1,6 @@
-# Midterm Exam
+# Final Exam
 
-## design decisions
+## design decisions (midterm)
 
 1. Modular Architecture:
     - `ChatServer` class (in `server.h`) encapsulates all server-side logic, including client management and message handling.
@@ -26,7 +26,13 @@
     - the server will respond with a `[PONG]` message to the client
     - if the client doesn't receive a `[PONG]` message within 3 seconds, it will assume the connection is failed
 
-## additional features
+## design decisions (final)
+
+1. midterm design decisions are kept since required argument are not changed.
+2. use an additional ssl_helper.h file declare inline helper function for SSL/TLS and keep the chat_server.cpp and chat_client.cpp clean as possible.
+3. SSL/TLS was used by default for tcp connections.
+
+## additional features (midterm)
 
 1. Join/Leave Notifications: Server broadcasts system-wide notifications when clients connect or disconnect.
 2. Color-Coded Output: 
@@ -46,6 +52,13 @@
 5. message delivery confirmation:
     - when a client sends a message, the server will respond with `[SENT]` to indicate that the message has been received
     - on client side, before receiving `[SENT]`, it will add a `(message sending...)` postfix to the message, and after receiving `[SENT]`, it will replace `(message sending...)` with `(message sent)`
+
+## additional features (final)
+
+1. if server.crt or server.key doesn't exist, server will generate key and a self-signed certificate automatically
+2. connection will fail if server's certificate is expired or the certificate's common name doesn't match the hostname
+3. warn user if the certificate is self-signed (not issued by a trusted CA)
+4. add /tls command to obtain the server certificate information
 
 ## observations
 
