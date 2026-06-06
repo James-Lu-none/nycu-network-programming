@@ -176,7 +176,7 @@ inline std::string get_asn1_integer_string(const ASN1_INTEGER* serial) {
     return std::string(buf);
 }
 
-inline int verify_ssl_cert (SSL* ssl) {
+inline int verify_ssl_cert (SSL* ssl, const char* host) {
     X509* cert = SSL_get_peer_certificate(ssl);
     if (!cert) {
         LOG_ERROR("No server certificate presented.");
@@ -242,7 +242,8 @@ inline void print_ssl_cert_info(SSL* ssl) {
     X509_NAME* iss = X509_get_issuer_name(cert);
     bool is_self_signed = (subj && iss && X509_NAME_cmp(subj, iss) == 0);
 
-    printf("\n" BOLD CYAN "--- TLS Server Certificate Information ---" RESET "\n");
+    printf("\n");
+    printf(BOLD CYAN "--- TLS Server Certificate Information ---" RESET "\n");
     printf(BOLD "Subject: " RESET "%s\n", subject_buf);
     printf(BOLD "Issuer:  " RESET "%s\n", issuer_buf);
     printf(BOLD "Serial:  " RESET "%s\n", get_asn1_integer_string(serial).c_str());
@@ -250,7 +251,8 @@ inline void print_ssl_cert_info(SSL* ssl) {
     printf("  " BOLD "Not Before: " RESET "%s\n", get_asn1_time_string(not_before).c_str());
     printf("  " BOLD "Not After:  " RESET "%s\n", get_asn1_time_string(not_after).c_str());
     printf(BOLD "Status:   " RESET "%s\n", is_self_signed ? YELLOW "Self-Signed Certificate (Untrusted)" RESET : GREEN "Trusted / Verified Certificate" RESET);
-    printf(BOLD CYAN "------------------------------------------" RESET "\n\n");
+    printf(BOLD CYAN "------------------------------------------" RESET);
+    printf("\n\n");
 
     X509_free(cert);
 }

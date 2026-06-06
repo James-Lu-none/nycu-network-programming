@@ -153,7 +153,7 @@ int main(int argc, char* argv[]) {
             return 1;
         }
 
-        if (verify_ssl_cert(ssl, ssl_ctx, s, host) != 0) {
+        if (verify_ssl_cert(ssl, host) != 0) {
             SSL_free(ssl);
             SSL_CTX_free(ssl_ctx);
             CLOSESOCKET(s);
