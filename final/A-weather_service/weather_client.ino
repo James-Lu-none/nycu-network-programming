@@ -72,7 +72,12 @@ void updateScrollFrame() {
   // data indicator dots
   matrix.stroke(0xFFFFFF);
   for (int i = 0; i < 4; i++) {
-    if (data[i].hasData) {
+    // loop through all 4 weather data and blink the specific dot while requesting
+    if (httpState == HTTP_AWAITING_RESPONSE && fetchLocationIndex == i) {
+      if ((millis() / 250) % 2 == 0) {
+        matrix.point(8 + i, 7);
+      }
+    } else if (data[i].hasData) {
       matrix.point(8 + i, 7);
     }
   }
