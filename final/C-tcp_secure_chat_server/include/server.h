@@ -139,7 +139,13 @@ public:
                 if (loc != "taipei" && loc != "taoyuan" && loc != "hsinchu" && loc != "miaoli") {
                     response = string(RED) + "Invalid location. Choose from taipei, taoyuan, hsinchu, miaoli." + RESET;
                 } else {
-                    response = get_weather(loc);
+                    WeatherData *weather_data = new WeatherData;
+                    if(get_weather(loc, weather_data) < 0) {
+                        response = string(RED) + "Failed to get weather information." + RESET;
+                    } else {
+                        response = format_weather(loc, weather_data);
+                    }
+                    delete weather_data;
                 }
             }
         } else {

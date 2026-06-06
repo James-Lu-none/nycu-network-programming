@@ -32,6 +32,7 @@
 2. use an additional ssl_helper.h file declare inline helper function for SSL/TLS and keep the chat_server.cpp and chat_client.cpp clean as possible.
 3. SSL/TLS is used by default for tcp connections.
 4. ignore sigpipe signal to avoid server get killed when certificate verification fails on client side
+5. use a WeatherData struct pointer to store weather information and let get_weather function return 0 if success and -1 if failed
 
 ## additional features (midterm)
 

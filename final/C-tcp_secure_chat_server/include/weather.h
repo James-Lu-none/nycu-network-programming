@@ -14,26 +14,43 @@ using namespace std;
 #define API_PORT "80"
 #define API_PATH "/weather/weather.do"
 
-inline string get_weather(string location) {
+struct WeatherData {
+    string time;
+    string temperature;
+    string humidity;
+};
+
+inline string format_weather(const string& location, const WeatherData* data) {
+    return string(BOLD CYAN) + "--- Weather Report for " + location + " ---" + RESET + "\n" +
+           BOLD "Time:        " RESET + data->time + "\n" +
+           BOLD "Temperature: " RESET + data->temperature + " °C\n" +
+           BOLD "Humidity:    " RESET + data->humidity + " %\n" +
+           string(BOLD CYAN) + "---------------------------------" + RESET;
+}
+
+inline int get_weather(string location, WeatherData* data) {
     struct addrinfo hints, *res;
     memset(&hints, 0, sizeof(hints));
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_STREAM;
     
     if (getaddrinfo(API_HOST, API_PORT, &hints, &res) != 0) {
-        return "Error: Could not resolve weather server address";
+        LOG_ERROR("Could not resolve weather server address");
+        return -1;
     }
 
     SOCKET sock = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
     if (!ISVALIDSOCKET(sock)) {
         freeaddrinfo(res);
-        return "Error: Could not create socket for weather server";
+        LOG_ERROR("Could not create socket for weather server");
+        return -1;
     }
 
     if (connect(sock, res->ai_addr, res->ai_addrlen) < 0) {
         CLOSESOCKET(sock);
         freeaddrinfo(res);
-        return "Error: Could not connect to weather server";
+        LOG_ERROR("Could not connect to weather server");
+        return -1;
     }
     freeaddrinfo(res);
 
@@ -51,7 +68,8 @@ inline string get_weather(string location) {
         int n = send(sock, request.c_str() + sent, total_to_send - sent, 0);
         if (n <= 0) {
             CLOSESOCKET(sock);
-            return "Error: Failed to send request to weather server";
+            LOG_ERROR("Failed to send request to weather server");
+            return -1;
         }
         sent += n;
     }
@@ -62,7 +80,8 @@ inline string get_weather(string location) {
         int n = recv(sock, buf, sizeof(buf) - 1, 0);
         if (n < 0) {
             CLOSESOCKET(sock);
-            return "Error: Failed to read from weather server";
+            LOG_ERROR("Failed to read from weather server");
+            return -1;
         }
         if (n == 0) break;
         buf[n] = '\0';
@@ -84,7 +103,8 @@ inline string get_weather(string location) {
     }
 
     if (response.find("HTTP/1.1 200") == string::npos && response.find("HTTP/1.0 200") == string::npos) {
-        return "Error: Weather server returned non-200 status.";
+        LOG_ERROR("Weather server returned non-200 status");
+        return -1;
     }
 
     // trim body_content
@@ -103,15 +123,14 @@ inline string get_weather(string location) {
         string temp_part = body_content.substr(comma1 + 1, comma2 - comma1 - 1);
         string humid_part = body_content.substr(comma2 + 1);
 
-        string formatted = string(BOLD CYAN) + "--- Weather Report for " + location + " ---" + RESET + "\n" +
-                                BOLD "Time:        " RESET + time_part + "\n" +
-                                BOLD "Temperature: " RESET + temp_part + " °C\n" +
-                                BOLD "Humidity:    " RESET + humid_part + " %\n" +
-                                string(BOLD CYAN) + "---------------------------------" + RESET;
-        return formatted;
+        data->time = time_part;
+        data->temperature = temp_part;
+        data->humidity = humid_part;
+        return 0;
     }
 
-    return "Error: Failed to parse weather data: " + body_content;
+    LOG_ERROR("Failed to parse weather data: %s", body_content.c_str());
+    return -1;
 }
 
 #endif // WEATHER_H
