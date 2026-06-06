@@ -7,10 +7,10 @@ CFLAGS = -Wall -I./include
 all: chat_server chat_client
 
 chat_server: ./src/chat_server.cpp
-	$(CC) $(CFLAGS) ./src/chat_server.cpp -o chat_server
+	$(CC) $(CFLAGS) ./src/chat_server.cpp -o chat_server -lssl -lcrypto
 
 chat_client: ./src/chat_client.cpp
-	$(CC) $(CFLAGS) ./src/chat_client.cpp -o chat_client
+	$(CC) $(CFLAGS) ./src/chat_client.cpp -o chat_client -lssl -lcrypto
 
 clean:
 	rm -f chat_server chat_client
