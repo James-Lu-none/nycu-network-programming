@@ -60,7 +60,7 @@
 2. connection will fail if server's certificate is expired or the certificate's common name doesn't match the hostname
 3. warn user if the certificate is self-signed (not issued by a trusted CA)
 4. add `/tls` command to obtain the server certificate information
-5. add `/weather <location>` command to obtain weather information using the api provided in the assigment A
+5. add `/weather <location>` command to obtain weather information using the api provided in the assignment A
 
 ## observations (midterm)
 
