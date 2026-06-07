@@ -12,7 +12,7 @@
 
 1. Interactive GET Web Dashboard:
     - Requesting `GET /`, `/index.html`, or `/dashboard` serves a modern glassmorphism dashboard designed by AI.
-    - It showcases current temperature/humidity cards and dynamically plots historical weather trends using a dual-axis line chart.
+    - It showcases current temperature/humidity cards and dynamically plots historical weather trends using a dual-axis line chart powered by Chart.js.
 2. Three-dot status LED Indicators on arduino:
     - The bottom-right row of the Arduino LED Matrix acts as a status board using single dots:
         - Col 9 (Success): Lit if the last data upload succeeded.
