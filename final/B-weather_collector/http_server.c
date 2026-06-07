@@ -1,53 +1,5 @@
 #include "sock_compat.h"
 
-#define ABS(x) ((x) < 0 ? -(x) : (x))
-
-const char *get_content_type(const char* path)
-{
-    char *extension[] = {
-        ".css",
-        ".csv",
-        ".gif",
-        ".htm",
-        ".html",
-        ".ico",
-        ".jpeg",
-        ".jpg",
-        ".js",
-        ".json",
-        ".png",
-        ".pdf",
-        ".svg",
-        ".txt"
-    };
-
-    char *mime_type[] = {
-        "text/css",
-        "text/csv",
-        "image/gif",
-        "text/html",
-        "text/html",
-        "image/x-icon",
-        "image/jpeg",
-        "image/jpeg",
-        "application/javascript",
-        "application/json",
-        "image/png",
-        "application/pdf",
-        "image/svg+xml",
-        "text/plain"
-    };
-
-    for (int i = 0; i < sizeof(extension) / sizeof(char*); i++)
-    {
-        if (strcmp(path + strlen(path) - strlen(extension[i]), extension[i]) == 0)
-        {
-            return mime_type[i];
-        }
-    }
-    return "application/octet-stream";
-}
-
 SOCKET create_socket(const char* host, const char *port)
 {
     printf("Configuring local address...\n");
@@ -78,7 +30,7 @@ SOCKET create_socket(const char* host, const char *port)
     int option = 0;
     if (setsockopt(socket_listen, IPPROTO_IPV6, IPV6_V6ONLY, (void*)&option, sizeof(option))) {
         fprintf(stderr, "setsockopt() failed. (%d)\n", GETSOCKETERRNO());
-        return 1;
+        exit(1);
     }
 
     printf("Binding socket to local address...\n");
@@ -125,7 +77,7 @@ struct client_info *get_client (SOCKET query_socket)
     struct client_info *client = client_list;
     while (client)
     {
-        if (client->socket == query_socket || query_socket == -1)
+        if (client->socket == query_socket)
         {
             return client;
         }
@@ -209,13 +161,7 @@ fd_set wait_on_clients(SOCKET server_socket)
     return read_ready;
 }
 
-void send_status_code
-(
-    struct client_info *to_send_client,
-    int status_code,
-    char *additional_header,
-    char *additional_content
-)
+void send_status_code(struct client_info *to_send_client, int status_code, const char *body)
 {
     char to_send_buffer[1024];
     memset(to_send_buffer, 0, sizeof(to_send_buffer));
@@ -232,75 +178,17 @@ void send_status_code
         break;
     }
     sprintf(to_send_buffer + strlen(to_send_buffer), "Content-Type: text/html\r\n");
-    if (additional_header)
-    {
-        sprintf(to_send_buffer + strlen(to_send_buffer), "%s\r\n", additional_header);
-    }
     sprintf(to_send_buffer + strlen(to_send_buffer), "\r\n");
-    if (additional_content)
+    if (body)
     {
-        sprintf(to_send_buffer + strlen(to_send_buffer), "%s", additional_content);
+        sprintf(to_send_buffer + strlen(to_send_buffer), "%s", body);
     }
 
     send(to_send_client->socket, to_send_buffer, strlen(to_send_buffer), 0);
     drop_client(to_send_client);
 }
 
-#define RESPONSE_BUFFER_SIZE 1024
-void send_resource
-(
-    struct client_info *client,
-    const char *path
-)
-{
-    char to_send_buffer[RESPONSE_BUFFER_SIZE + 1];
-    memset(to_send_buffer, 0, sizeof(to_send_buffer));
-    sprintf(to_send_buffer, "HTTP/1.1 200 OK\r\n");
-    sprintf(to_send_buffer + strlen(to_send_buffer), "Content-Type: %s\r\n", get_content_type(path));
-    sprintf(to_send_buffer + strlen(to_send_buffer), "\r\n");
-
-    if (strcmp(path, "/") == 0)
-    {
-        path = "index.html";
-    }
-
-    if (strlen(path)>128) {
-        send_status_code(client, 400, NULL, "Path too long.\r\n");
-        return;
-    }
-    char full_path[256]; // 128 for path, 128 for "public/"
-    sprintf(full_path, "public/%s", path);
-
-    FILE *file = fopen(full_path, "rb");
-    if (!file)
-    {
-        send_status_code(client, 400, NULL, "File not found.\r\n");
-        return;
-    }
-
-    fseek(file, 0, SEEK_END);
-    long file_size = ftell(file);
-    fseek(file, 0, SEEK_SET);
-    size_t total_read = 0;
-    while (total_read < file_size)
-    {
-        size_t to_read = file_size - total_read;
-        if (to_read > RESPONSE_BUFFER_SIZE - strlen(to_send_buffer))
-        {
-            to_read = RESPONSE_BUFFER_SIZE - strlen(to_send_buffer);
-        }
-        size_t read = fread(to_send_buffer + strlen(to_send_buffer), 1, to_read, file);
-        if (read <= 0)
-        {
-            break;
-        }
-        total_read += read;
-    }
-
-    send_status_code(client, 200, NULL, to_send_buffer);
-}
-
-int is_duplicate_record(float new_temp, float new_hum)
+int handle_weather_data(float new_temp, float new_hum)
 {
     FILE *file = fopen("weather.csv", "r");
     if (!file)
@@ -312,26 +200,19 @@ int is_duplicate_record(float new_temp, float new_hum)
     char last_line[256] = {0};
     while (fgets(line, sizeof(line), file))
     {
-        int len = strlen(line);
-        while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r'))
-        {
-            line[len - 1] = '\0';
-            len--;
-        }
-        if (len > 0)
+        line[strcspn(line, "\r\n")] = '\0';
+        if (line[0] != '\0')
         {
             strcpy(last_line, line);
         }
     }
     fclose(file);
 
-    if (strlen(last_line) == 0)
+    if (last_line[0] == '\0')
     {
         return 0; // File is empty
     }
-
-    // last_line is format: <received datetime>, <temperature>, <humidity>
-    // e.g. "2026-06-06 19:47:00, 25.00, 60.00"
+    
     char *last_comma = strrchr(last_line, ',');
     if (!last_comma) return 0;
     float last_hum = (float)atof(last_comma + 1);
@@ -341,13 +222,7 @@ int is_duplicate_record(float new_temp, float new_hum)
     if (!prev_comma) return 0;
     float last_temp = (float)atof(prev_comma + 1);
 
-    // Compare with tolerance of 0.01
-    if (ABS(last_temp - new_temp) < 0.01f && ABS(last_hum - new_hum) < 0.01f)
-    {
-        return 1; // Duplicate
-    }
-
-    return 0;
+    return (last_temp == new_temp && last_hum == new_hum);
 }
 
 void handle_http_request(struct client_info *client, char *body, int content_length)
@@ -358,59 +233,33 @@ void handle_http_request(struct client_info *client, char *body, int content_len
     char path[256] = {0};
     if (sscanf(client->request, "%15s %255s", method, path) != 2)
     {
-        send_status_code(client, 400, NULL, "Bad request line.\r\n");
+        send_status_code(client, 400, "Bad request line.\r\n");
         return;
     }
 
     printf("Request - Method: %s, Path: %s\n", method, path);
 
-    if (strcmp(method, "GET") == 0)
-    {
-        send_resource(client, path);
-    }
-    else if (strcmp(method, "POST") == 0)
+    if (strcmp(method, "POST") == 0)
     {
         float temp = 0.0f;
         float hum = 0.0f;
         // Parse input format: <temperature>, <humidity>
-        if (sscanf(body, "%f,%f", &temp, &hum) == 2 || sscanf(body, "%f , %f", &temp, &hum) == 2)
+        if (sscanf(body, "%f , %f", &temp, &hum) == 2)
         {
-            time_t rawtime;
-            struct tm *timeinfo;
-            char time_buffer[80];
-            time(&rawtime);
-            timeinfo = localtime(&rawtime);
-            strftime(time_buffer, sizeof(time_buffer), "%Y-%m-%d %H:%M:%S", timeinfo);
-
-            if (!is_duplicate_record(temp, hum))
-            {
-                FILE *csv = fopen("weather.csv", "a");
-                if (csv)
-                {
-                    fprintf(csv, "%s, %.2f, %.2f\n", time_buffer, temp, hum);
-                    fclose(csv);
-                    printf("Logged: %s, %.2f, %.2f\n", time_buffer, temp, hum);
-                }
-                else
-                {
-                    fprintf(stderr, "Error opening weather.csv\n");
-                }
+            if (handle_weather_data(temp, hum)) {
+                send_status_code(client, 200, "Duplicate data received. Ignoring.\r\n");
+            } else {
+                send_status_code(client, 200, "Data received successfully.\r\n");
             }
-            else
-            {
-                printf("Duplicate data ignored (Temp: %.2f, Humid: %.2f)\n", temp, hum);
-            }
-
-            send_status_code(client, 200, NULL, "Data received successfully.\r\n");
         }
         else
         {
-            send_status_code(client, 400, NULL, "Invalid data format. Expected: <temperature>, <humidity>\r\n");
+            send_status_code(client, 400, "Invalid data format. Expected: <temperature>, <humidity>\r\n");
         }
     }
     else
     {
-        send_status_code(client, 400, NULL, "Method not supported.\r\n");
+        send_status_code(client, 400, "Method not supported.\r\n");
     }
 }
 
@@ -456,7 +305,7 @@ int main(int argc, char** argv)
             {
                 if (client->received >= MAX_REQUEST_SIZE)
                 {
-                    send_status_code(client, 400, NULL, "Request too large.\r\n");
+                    send_status_code(client, 400, "Request too large.\r\n");
                     client = next;
                     continue;
                 }
@@ -486,15 +335,7 @@ int main(int argc, char** argv)
 
                     if (header_end)
                     {
-                        char *body = NULL;
-                        if (strstr(client->request, "\r\n\r\n"))
-                        {
-                            body = header_end + 4;
-                        }
-                        else
-                        {
-                            body = header_end + 2;
-                        }
+                        char *body = header_end + (header_end[0] == '\r' ? 4 : 2);
 
                         int content_length = 0;
                         char *cl_header = strstr(client->request, "Content-Length:");
