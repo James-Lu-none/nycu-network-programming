@@ -18,3 +18,7 @@
         - Col 9 (Success): Lit if the last data upload succeeded.
         - Col 10 (Duplicate): Lit if the data upload was ignored due to duplicates.
         - Col 11 (Error/Timeout): Lit if the upload timed out or failed to connect.
+
+## demo
+
+![alt text](dashboard.png)
