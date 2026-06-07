@@ -11,10 +11,10 @@
 ## my own creativity
 
 1. Interactive GET Web Dashboard:
-    - Requesting `GET /`, `/index.html`, or `/dashboard` serves a responsive, modern glassmorphism dashboard.
-    - It showcases current temperature/humidity cards and dynamically plots historical weather trends using a dual-axis line chart powered by Chart.js.
-2. Three-dot status LED Indicators:
+    - Requesting `GET /`, `/index.html`, or `/dashboard` serves a modern glassmorphism dashboard designed by AI.
+    - It showcases current temperature/humidity cards and dynamically plots historical weather trends using a dual-axis line chart.
+2. Three-dot status LED Indicators on arduino:
     - The bottom-right row of the Arduino LED Matrix acts as a status board using single dots:
-        - **Col 9 (Success)**: Lit if the last data upload succeeded.
-        - **Col 10 (Duplicate)**: Lit if the data upload was ignored due to duplicates.
-        - **Col 11 (Error/Timeout)**: Lit if the upload timed out or failed to connect.
+        - Col 9 (Success): Lit if the last data upload succeeded.
+        - Col 10 (Duplicate): Lit if the data upload was ignored due to duplicates.
+        - Col 11 (Error/Timeout): Lit if the upload timed out or failed to connect.
