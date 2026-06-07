@@ -59,22 +59,21 @@ SOCKET create_socket(const char* host, const char *port)
     return socket_listen;
 }
 
-#define MAX_REQUEST_SIZE 2047
-struct client_info
+typedef struct
 {
     SOCKET socket;
     struct sockaddr_storage address;
     socklen_t address_length;
-    char request[MAX_REQUEST_SIZE + 1];
+    char request[2048];
     int received;
-    struct client_info *next;
-};
+    client_info *next;
+} client_info;
 
-static struct client_info *client_list = 0;
+static client_info *client_list = 0;
 
-struct client_info *get_client (SOCKET query_socket)
+client_info *get_client (SOCKET query_socket)
 {
-    struct client_info *client = client_list;
+    client_info *client = client_list;
     while (client)
     {
         if (client->socket == query_socket)
@@ -84,7 +83,7 @@ struct client_info *get_client (SOCKET query_socket)
         client = client->next;
     }
 
-    struct client_info *new_client = malloc(sizeof(struct client_info));
+    client_info *new_client = malloc(sizeof(client_info));
     new_client->socket = query_socket;
     new_client->address_length = sizeof(new_client->address);
     new_client->request[0] = 0;
@@ -95,10 +94,10 @@ struct client_info *get_client (SOCKET query_socket)
     return new_client;
 }
 
-void drop_client (struct client_info *to_drop_client)
+void drop_client (client_info *to_drop_client)
 {
     CLOSESOCKET(to_drop_client->socket);
-    struct client_info **pp = &client_list;
+    client_info **pp = &client_list;
     while (*pp)
     {
         if (*pp == to_drop_client)
@@ -111,7 +110,7 @@ void drop_client (struct client_info *to_drop_client)
     }
 }
 
-const char *get_client_address(struct client_info *client)
+const char *get_client_address(client_info *client)
 {
     static char address_buffer[100];
     getnameinfo(
@@ -131,7 +130,7 @@ fd_set wait_on_clients(SOCKET server_socket)
     fd_set read_ready;
     FD_ZERO(&read_ready);
     FD_SET(server_socket, &read_ready);
-    struct client_info *client = client_list;
+    client_info *client = client_list;
     int max_socket = server_socket;
     while (client)
     {
@@ -161,7 +160,7 @@ fd_set wait_on_clients(SOCKET server_socket)
     return read_ready;
 }
 
-void send_status_code(struct client_info *to_send_client, int status_code, const char *body)
+void send_status_code(client_info *to_send_client, int status_code, const char *body)
 {
     char to_send_buffer[1024];
     memset(to_send_buffer, 0, sizeof(to_send_buffer));
@@ -225,7 +224,7 @@ int handle_weather_data(float new_temp, float new_hum)
     return (last_temp == new_temp && last_hum == new_hum);
 }
 
-void handle_http_request(struct client_info *client, char *body, int content_length)
+void handle_http_request(client_info *client, char *body, int content_length)
 {
     body[content_length] = '\0';
 
@@ -281,7 +280,7 @@ int main(int argc, char** argv)
         read_ready = wait_on_clients(server_socket);
         if (FD_ISSET(server_socket, &read_ready))
         {
-            struct client_info *client = get_client(-1);
+            client_info *client = get_client(-1);
             client->socket = accept(
                 server_socket,
                 (struct sockaddr*) &(client->address),
@@ -297,10 +296,10 @@ int main(int argc, char** argv)
             printf("New Connection From %s. \n", get_client_address(client));
         }
 
-        struct client_info *client = client_list;
+        client_info *client = client_list;
         while (client)
         {
-            struct client_info *next = client->next;
+            client_info *next = client->next;
             if (FD_ISSET(client->socket, &read_ready))
             {
                 if (client->received >= MAX_REQUEST_SIZE)
