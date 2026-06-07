@@ -1,5 +1,16 @@
 # Final Exam
 
+## build and run
+
+- windows: 
+    - run `build.bat` to compile
+    - run `./chat_server` to start the server on port 8080
+    - run `./chat_client chat_server your_name [port] [protocol]` to start the client
+- linux:
+    - run `make clean && make` to compile
+    - run `./chat_server` to start the server on port 8080
+    - run `./chat_client chat_server your_name [port] [protocol]` to start the client
+
 ## design decisions (midterm)
 
 1. Modular Architecture:
