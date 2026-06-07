@@ -26,6 +26,14 @@ struct WeatherData {
 
 WeatherData localData = {0, 0, false};
 
+enum UploadResult {
+  RESULT_NONE,
+  RESULT_SUCCESS,
+  RESULT_DUPLICATE,
+  RESULT_ERROR
+};
+UploadResult lastUploadResult = RESULT_NONE;
+
 unsigned long lastSensorReadTime = 0;
 unsigned long lastPostTime = 0;
 const unsigned long postInterval = 10000;
@@ -52,6 +60,17 @@ void updateScrollFrame() {
   matrix.beginText(scrollX, 1, 0xFFFFFF);
   matrix.print(scrollTextStr);
   matrix.endText();
+  
+  // Status indicator dots at the bottom-right corner (row 7)
+  matrix.stroke(0xFFFFFF);
+  if (lastUploadResult == RESULT_SUCCESS) {
+    matrix.point(9, 7);
+  } else if (lastUploadResult == RESULT_DUPLICATE) {
+    matrix.point(10, 7);
+  } else if (lastUploadResult == RESULT_ERROR) {
+    matrix.point(11, 7);
+  }
+
   matrix.endDraw();
 }
 
@@ -85,6 +104,7 @@ void sendPostRequest() {
       WiFi.begin(wifi_ssid, wifi_pass);
       lastConnectAttempt = now;
     }
+    lastUploadResult = RESULT_ERROR;
     return;
   }
   if (httpState != HTTP_IDLE) return;
@@ -106,6 +126,8 @@ void sendPostRequest() {
     
     httpState = HTTP_AWAITING_RESPONSE;
     requestSendTime = millis();
+  } else {
+    lastUploadResult = RESULT_ERROR;
   }
 }
 
@@ -113,13 +135,34 @@ void handleResponse() {
   if (httpState != HTTP_AWAITING_RESPONSE) return;
 
   if (client.available() > 0) {
+    bool isBody = false;
+    String body = "";
     while (client.available() > 0) {
-      client.read();
+      String line = client.readStringUntil('\n');
+      line.trim();
+      if (!isBody) {
+        if (line.length() == 0) {
+          isBody = true;
+        }
+      } else {
+        if (line.length() > 0) {
+          body += line;
+        }
+      }
     }
     httpState = HTTP_IDLE;
+    body.trim();
+    if (body.indexOf("Duplicate") != -1) {
+      lastUploadResult = RESULT_DUPLICATE;
+    } else if (body.indexOf("success") != -1 || body.indexOf("received") != -1) {
+      lastUploadResult = RESULT_SUCCESS;
+    } else {
+      lastUploadResult = RESULT_ERROR;
+    }
   } else if (!client.connected() || (millis() - requestSendTime > responseTimeout)) {
     client.stop();
     httpState = HTTP_IDLE;
+    lastUploadResult = RESULT_ERROR;
   }
 }
 
