@@ -182,8 +182,8 @@ void handleResponse() {
     httpState = HTTP_IDLE;
     
     body.trim();
-    // Serial.print("Server Response Body: ");
-    // Serial.println(body);
+    Serial.print("Server Response Body: ");
+    Serial.println(body);
     
     int comma1 = body.indexOf(',');
     int comma2 = body.indexOf(',', comma1 + 1);
@@ -198,8 +198,8 @@ void handleResponse() {
       data[idx].humid.trim();
       data[idx].hasData = true;
       
-      // Serial.print("updated weather data for ");
-      // Serial.println(data[idx].queryName);
+      Serial.print("updated weather data for ");
+      Serial.println(data[idx].queryName);
       
       // move to the next location for the next request interval
       fetchLocationIndex = (fetchLocationIndex + 1) % 4;
@@ -222,11 +222,11 @@ void setup() {
   wifi_status = WiFi.begin(wifi_ssid, wifi_pass);
   while (wifi_status != WL_CONNECTED) {
     delay(2000);
-    // Serial.print(".");
+    Serial.print(".");
     wifi_status = WiFi.status();
   }
 
-  // Serial.println("\nConnected to WiFi!");
+  Serial.println("\nConnected to WiFi!");
   client.setTimeout(50);
   setupSlide();
   lastDisplayStateTime = millis();
