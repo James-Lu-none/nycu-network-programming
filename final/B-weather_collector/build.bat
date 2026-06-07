@@ -1,0 +1,1 @@
+gcc http_server.c -o http_server -lssl -lcrypto -lws2_32

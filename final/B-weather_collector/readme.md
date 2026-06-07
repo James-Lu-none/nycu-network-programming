@@ -1,5 +1,14 @@
 # Weather Collector
 
+## build and run
+
+- windows: 
+    - run `build.bat` to compile
+    - run `./http_server` to start the server on port 8080
+- linux:
+    - run `make clean && make` to compile
+    - run `./http_server` to start the server on port 8080
+
 ## design decisions
 
 1. non-blocking state machine on Arduino:
